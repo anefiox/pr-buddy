@@ -4,6 +4,7 @@
     <Project Path="src/PrBuddy.Core/PrBuddy.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PrBuddy.Cli.Tests/PrBuddy.Cli.Tests.csproj" />
     <Project Path="tests/PrBuddy.Tests/PrBuddy.Tests.csproj" />
   </Folder>
 </Solution>

@@ -29,6 +29,28 @@ public class ConfigRuleTests
     }
 
     [Fact]
+    public void NewPackage_summarizes_a_brand_new_project_in_one_finding()
+    {
+        const string testProject = """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="coverlet.collector" Version="6.0.4" />
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+              </ItemGroup>
+            </Project>
+            """;
+
+        var finding = Assert.Single(Pr.Run(new NewPackageRule(), Pr.File("tests/A.Tests/A.Tests.csproj", null, testProject)));
+        Assert.Equal(3, finding.Line);
+        Assert.Contains("3 package(s): coverlet.collector, Microsoft.NET.Test.Sdk, xunit", finding.Message);
+    }
+
+    [Fact]
+    public void NewPackage_new_project_without_packages_is_silent() =>
+        Assert.Empty(Pr.Run(new NewPackageRule(), Pr.File("src/A/A.csproj", null, Project.Replace("<PackageReference Include=\"Serilog\" Version=\"3.0.0\" />", ""))));
+
+    [Fact]
     public void WeakenedChecks_flags_settings_that_turn_checks_off()
     {
         var after = Project.Replace(

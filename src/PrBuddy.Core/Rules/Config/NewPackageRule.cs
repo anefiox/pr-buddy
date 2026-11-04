@@ -14,6 +14,19 @@ public sealed partial class NewPackageRule : RuleBase
     {
         foreach (var file in context.Files.Where(f => FileClassifier.IsProjectFile(f.Path) && f.File.NewContent is not null))
         {
+            // A brand-new project gets one finding, not one per package of boilerplate.
+            if (file.File.Status == ChangeStatus.Added)
+            {
+                var added = PackageReference().Matches(file.File.NewContent!).Select(m => m.Groups[1].Value).Distinct().ToList();
+                if (added.Count > 0)
+                {
+                    var first = file.AddedLineTexts().FirstOrDefault(l => PackageReference().IsMatch(l.Text)).Line;
+                    yield return Report(file.Path, first == 0 ? null : first,
+                        $"New project with {added.Count} package(s): {string.Join(", ", added)}. Check each is the package you expect.");
+                }
+                continue;
+            }
+
             var existing = Packages(file.File.OldContent);
             foreach (var (line, text) in file.AddedLineTexts())
             {

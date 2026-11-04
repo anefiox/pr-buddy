@@ -1,24 +1,26 @@
 using PrBuddy.Core;
 using PrBuddy.Core.Git;
+using PrBuddy.Core.Reporting;
 using PrBuddy.Core.Rules;
 using PrBuddy.Core.Semantics;
 using Spectre.Console;
 
 namespace PrBuddy.Cli;
 
-internal static class ConsoleReport
+internal sealed class ConsoleReport(IAnsiConsole console)
 {
-    public static void Write(DiffRange range, AnalysisReport report)
+    public void Write(DiffRange range, AnalysisReport report, string? configSource)
     {
-        AnsiConsole.Write(new Spectre.Console.Rule(
+        console.Write(new Spectre.Console.Rule(
             $"[bold]PR Buddy[/] [grey]{Esc(range.BaseRef)}...{Esc(range.HeadRef)} ({range.MergeBaseSha[..7]}..{range.HeadSha[..7]})[/]")
         {
             Justification = Justify.Left,
         });
+        console.MarkupLine($"[grey]{(configSource is null ? "default rules (no prbuddy.json on the base branch)" : "config: " + Esc(configSource))}[/]");
 
         if (report.Files.Count == 0)
         {
-            AnsiConsole.MarkupLine("[grey]No changes between these refs.[/]");
+            console.MarkupLine($"[grey]{Esc(ReportText.NoChanges(report))}[/]");
             return;
         }
 
@@ -30,7 +32,7 @@ internal static class ConsoleReport
             WriteFileDetails(file);
     }
 
-    public static void WriteRules(IEnumerable<IRule> rules)
+    public void WriteRules(IEnumerable<IRule> rules)
     {
         var table = new Table { Border = TableBorder.Rounded };
         table.AddColumn("Id");
@@ -39,38 +41,35 @@ internal static class ConsoleReport
         table.AddColumn("Rule");
         foreach (var d in rules.Select(r => r.Descriptor))
             table.AddRow(d.Id, SeverityMarkup(d.DefaultSeverity), Esc(d.Category), Esc(d.Title));
-        AnsiConsole.Write(table);
+        console.Write(table);
     }
 
-    static void WriteSummary(AnalysisReport report)
+    void WriteSummary(AnalysisReport report)
     {
-        var added = report.Files.Sum(f => f.AddedLines);
-        var deleted = report.Files.Sum(f => f.DeletedLines);
-        var real = report.Files.Sum(f => f.SemanticDiff?.RealChangeCount ?? 0);
-        var cosmetic = report.Files.Count(f => f.Kind != FileKind.Generated && f.SemanticDiff is { IsCosmeticOnly: true });
-
-        AnsiConsole.MarkupLine(
-            $"{report.Files.Count} files  [green]+{added}[/] [red]-{deleted}[/]  ·  [bold]{real}[/] real member changes" +
-            $"  ·  {cosmetic} cosmetic-only files  ·  {FindingCounts(report.AllFindings.ToList())}");
-        AnsiConsole.WriteLine();
+        var s = ReportText.Summarize(report);
+        var ignored = s.IgnoredFiles > 0 ? $"  ·  [grey]{s.IgnoredFiles} ignored by config[/]" : "";
+        console.MarkupLine(
+            $"{s.Files} files  [green]+{s.AddedLines}[/] [red]-{s.DeletedLines}[/]  ·  [bold]{s.RealChanges}[/] real member changes" +
+            $"  ·  {s.CosmeticFiles} cosmetic-only files  ·  {FindingCounts(report.AllFindings)}{ignored}");
+        console.WriteLine();
     }
 
-    static void WritePullRequestFindings(IReadOnlyList<Finding> findings)
+    void WritePullRequestFindings(IReadOnlyList<Finding> findings)
     {
         if (findings.Count == 0) return;
-        AnsiConsole.MarkupLine("[bold]Whole PR[/]");
+        console.MarkupLine("[bold]Whole PR[/]");
         foreach (var finding in findings)
-            AnsiConsole.MarkupLine("  " + FindingLine(finding));
-        AnsiConsole.WriteLine();
+            console.MarkupLine("  " + FindingLine(finding));
+        console.WriteLine();
     }
 
-    static void WriteReadingOrder(AnalysisReport report)
+    void WriteReadingOrder(AnalysisReport report)
     {
         var files = report.ReviewFiles.ToList();
         if (files.Count == 0)
         {
-            AnsiConsole.MarkupLine("[green]Nothing needs a close read: every change is cosmetic or generated.[/]");
-            AnsiConsole.WriteLine();
+            console.MarkupLine("[green]Nothing needs a close read: every change is cosmetic or generated.[/]");
+            console.WriteLine();
             return;
         }
 
@@ -84,81 +83,48 @@ internal static class ConsoleReport
         for (var i = 0; i < files.Count; i++)
         {
             var f = files[i];
-            table.AddRow((i + 1).ToString(), RiskMarkup(f.RiskScore), FileMarkup(f), Esc(ChangeSummary(f)), FindingCounts(f.Findings));
+            table.AddRow((i + 1).ToString(), RiskMarkup(f.RiskScore), FileMarkup(f), Esc(ReportText.ChangeSummary(f)), FindingCounts(f.Findings));
         }
-        AnsiConsole.Write(table);
-        AnsiConsole.WriteLine();
+        console.Write(table);
+        console.WriteLine();
     }
 
-    static void WriteSkimList(AnalysisReport report)
+    void WriteSkimList(AnalysisReport report)
     {
         var skim = report.SkimFiles.ToList();
         if (skim.Count == 0) return;
 
-        AnsiConsole.MarkupLine($"[bold]Skim only[/] [grey]({skim.Count})[/]");
+        console.MarkupLine($"[bold]Skim only[/] [grey]({skim.Count})[/]");
         foreach (var f in skim)
-        {
-            var reason = f.Kind == FileKind.Generated ? "generated" : "formatting, comments or member order only";
-            AnsiConsole.MarkupLine($"  [grey]{Esc(f.Path)} · {reason}[/]");
-        }
-        AnsiConsole.WriteLine();
+            console.MarkupLine($"  [grey]{Esc(f.Path)} · {ReportText.SkimReason(f)}[/]");
+        console.WriteLine();
     }
 
-    static void WriteFileDetails(FileReport file)
+    void WriteFileDetails(FileReport file)
     {
-        AnsiConsole.Write(new Spectre.Console.Rule($"[bold]{Esc(file.Path)}[/]")
+        console.Write(new Spectre.Console.Rule($"[bold]{Esc(file.Path)}[/]")
         {
             Justification = Justify.Left,
             Style = Style.Parse("grey"),
         });
         if (file.OldPath is not null)
-            AnsiConsole.MarkupLine($"  [grey]renamed from {Esc(file.OldPath)}[/]");
+            console.MarkupLine($"  [grey]renamed from {Esc(file.OldPath)}[/]");
 
         if (file.SemanticDiff is { } diff)
         {
             if (diff.HasParseErrors)
-                AnsiConsole.MarkupLine("  [yellow]This file has syntax errors, so the member list may be incomplete.[/]");
+                console.MarkupLine("  [yellow]This file has syntax errors, so the member list may be incomplete.[/]");
             foreach (var change in diff.Changes.Where(c => c.Change != MemberChangeKind.CosmeticOnly))
-                AnsiConsole.MarkupLine("  " + ChangeLine(change, showApi: file.Kind != FileKind.Test));
+                console.MarkupLine("  " + ChangeLine(change, ReportText.ShowsPublicApi(file)));
             var cosmetic = diff.Changes.Count(c => c.Change == MemberChangeKind.CosmeticOnly);
             if (cosmetic > 0)
-                AnsiConsole.MarkupLine($"  [grey]+ {cosmetic} member(s) with only formatting or comment changes[/]");
+                console.MarkupLine($"  [grey]+ {cosmetic} member(s) with only formatting or comment changes[/]");
         }
 
         foreach (var finding in file.Findings)
-            AnsiConsole.MarkupLine("  " + FindingLine(finding));
-        AnsiConsole.WriteLine();
+            console.MarkupLine("  " + FindingLine(finding));
+        console.WriteLine();
     }
-
-    static string ChangeSummary(FileReport file)
-    {
-        var prefix = file.Status switch
-        {
-            ChangeStatus.Added => "new file: ",
-            ChangeStatus.Deleted => "deleted: ",
-            _ => "",
-        };
-
-        if (file.SemanticDiff is not { } diff)
-            return $"{prefix}+{file.AddedLines} -{file.DeletedLines} lines";
-
-        var real = diff.Changes.Where(c => c.Change != MemberChangeKind.CosmeticOnly).ToList();
-        if (real.Count == 0) return prefix + "formatting only";
-
-        var parts = real.GroupBy(c => c.Change).OrderBy(g => g.Key).Select(g => $"{g.Count()} {ChangeWord(g.Key)}");
-        var api = file.Kind == FileKind.Test ? 0 : real.Count(c => c.IsPublicApi);
-        return prefix + string.Join(", ", parts) + (api > 0 ? $" ({api} public API)" : "");
-    }
-
-    static string ChangeWord(MemberChangeKind kind) => kind switch
-    {
-        MemberChangeKind.BehaviorChanged => "behavior",
-        MemberChangeKind.SignatureChanged => "signature",
-        MemberChangeKind.Added => "added",
-        MemberChangeKind.Removed => "removed",
-        MemberChangeKind.Renamed => "renamed/moved",
-        _ => "cosmetic",
-    };
 
     static string ChangeLine(MemberChange change, bool showApi)
     {
@@ -191,28 +157,21 @@ internal static class ConsoleReport
         return $"{icon} [grey]{finding.RuleId}[/] {where}{Esc(finding.Message)}";
     }
 
-    static string FindingCounts(IReadOnlyCollection<Finding> findings)
+    static string FindingCounts(IEnumerable<Finding> findings)
     {
-        if (findings.Count == 0) return "[green]no findings[/]";
-        var parts = new List<string>();
-        AddCount(Severity.Critical, "critical", "red");
-        AddCount(Severity.Warning, "warning", "yellow");
-        AddCount(Severity.Info, "info", "blue");
-        return string.Join(", ", parts);
-
-        void AddCount(Severity severity, string word, string color)
-        {
-            var count = findings.Count(f => f.Severity == severity);
-            if (count > 0) parts.Add($"[{color}]{count} {word}{(count > 1 && severity == Severity.Warning ? "s" : "")}[/]");
-        }
+        var counts = ReportText.CountFindings(findings);
+        if (counts.Count == 0) return "[green]no findings[/]";
+        return string.Join(", ", counts.Select(c => $"[{Color(c.Severity)}]{c.Label}[/]"));
     }
 
-    static string SeverityMarkup(Severity severity) => severity switch
+    static string Color(Severity severity) => severity switch
     {
-        Severity.Critical => "[red]critical[/]",
-        Severity.Warning => "[yellow]warning[/]",
-        _ => "[blue]info[/]",
+        Severity.Critical => "red",
+        Severity.Warning => "yellow",
+        _ => "blue",
     };
+
+    static string SeverityMarkup(Severity severity) => $"[{Color(severity)}]{severity.ToString().ToLowerInvariant()}[/]";
 
     static string RiskMarkup(int score) => score switch
     {

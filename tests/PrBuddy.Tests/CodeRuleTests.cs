@@ -40,6 +40,33 @@ public class CodeRuleTests
     }
 
     [Fact]
+    public void EmptyCatch_is_only_info_when_the_intent_is_visible()
+    {
+        // Patterns from real repos: best-effort cleanup that ignores one specific exception.
+        const string after = """
+            using System;
+            using System.IO;
+            class Cleanup
+            {
+                void A() { try { File.Delete("x"); } catch (IOException) { } }
+                void B() { try { File.Delete("x"); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
+                void C() { try { File.Delete("x"); } catch { /* best effort: the OS cleans temp anyway */ } }
+                void D() { try { File.Delete("x"); } catch (Exception) { } }
+                void E() { try { File.Delete("x"); } catch { } }
+            }
+            """;
+
+        var findings = Run(new EmptyCatchRule(), null, after);
+
+        Assert.Equal([5, 6, 7, 8, 9], findings.Select(f => f.Line!.Value));
+        Assert.Equal(
+            [Severity.Info, Severity.Info, Severity.Info, Severity.Warning, Severity.Warning],
+            findings.Select(f => f.Severity));
+        Assert.Contains("ignores IOException.", findings[0].Message);
+        Assert.Contains("ignores Exception when e is IOException or UnauthorizedAccessException.", findings[1].Message);
+    }
+
+    [Fact]
     public void SwallowedException_reports_catch_all_without_rethrow()
     {
         const string after = """
@@ -173,6 +200,9 @@ public class CodeRuleTests
     [InlineData("Arrange", "var sut = new Service();", false)]
     [InlineData("Act & Assert", "Assert.Throws<X>(() => sut.Run());", false)]
     [InlineData("Off by one on purpose: the API is 1-based", "index++;", false)]
+    // From a real repo: "toggles" is the one word the code doesn't say, and it's the useful part.
+    [InlineData("--god: start invincible (G toggles it in game).", "AsciiAdventure.Game.StartInvincible = args.Contains(\"--god\");", false)]
+    [InlineData("Start invincible", "Game.StartInvincible = true;", true)]
     public void RedundantComment_detects_comments_that_repeat_the_code(string comment, string code, bool expected) =>
         Assert.Equal(expected, RedundantCommentRule.IsRedundant(comment, code));
 

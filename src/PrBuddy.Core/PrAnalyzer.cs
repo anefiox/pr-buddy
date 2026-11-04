@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PrBuddy.Core.Configuration;
 using PrBuddy.Core.Rules;
 using PrBuddy.Core.Semantics;
 
@@ -21,7 +22,11 @@ public sealed record FileReport(
 }
 
 /// <param name="Files">In suggested reading order: riskiest first, skimmable files last.</param>
-public sealed record AnalysisReport(IReadOnlyList<FileReport> Files, IReadOnlyList<Finding> PullRequestFindings)
+/// <param name="IgnoredPaths">Changed files left out because prbuddy.json ignores them.</param>
+public sealed record AnalysisReport(
+    IReadOnlyList<FileReport> Files,
+    IReadOnlyList<Finding> PullRequestFindings,
+    IReadOnlyList<string> IgnoredPaths)
 {
     [JsonIgnore] public IEnumerable<FileReport> ReviewFiles => Files.Where(f => !f.IsSkimmable);
     [JsonIgnore] public IEnumerable<FileReport> SkimFiles => Files.Where(f => f.IsSkimmable);
@@ -30,17 +35,31 @@ public sealed record AnalysisReport(IReadOnlyList<FileReport> Files, IReadOnlyLi
 
 public static class PrAnalyzer
 {
-    public static AnalysisReport Analyze(IEnumerable<ChangedFile> files, IEnumerable<IRule>? rules = null)
+    /// <param name="snapshot">The whole repo at the PR head, for repo-wide rules. Without it they only see the PR's files.</param>
+    public static AnalysisReport Analyze(
+        IEnumerable<ChangedFile> files,
+        IEnumerable<IRule>? rules = null,
+        PrBuddyConfig? config = null,
+        IRepoSnapshot? snapshot = null)
     {
-        var analyzed = files.Select(f => new AnalyzedFile(f)).ToList();
-        var context = new PullRequestContext(analyzed);
+        config ??= PrBuddyConfig.Default;
+        var ruleList = (rules ?? DefaultRules.Create(config)).ToList();
+        config.Validate(ruleList.Select(r => r.Descriptor.Id));
+
+        var (ignored, kept) = files.ToList().Partition(f => config.IsIgnored(f.Path));
+        var analyzed = kept.Select(f => new AnalyzedFile(f)).ToList();
+        var context = new PullRequestContext(analyzed, snapshot, config.IsIgnored);
 
         var findings = new List<Finding>();
-        foreach (var rule in rules ?? DefaultRules.Create())
+        foreach (var rule in ruleList)
         {
+            var settings = config.For(rule.Descriptor.Id);
+            if (!settings.Enabled) continue;
             try
             {
-                findings.AddRange(rule.Analyze(context).ToList());
+                var results = rule.Analyze(context);
+                if (settings.Severity is { } severity) results = results.Select(f => f with { Severity = severity });
+                findings.AddRange(results.ToList());
             }
             catch (Exception ex)
             {
@@ -63,8 +82,11 @@ public static class PrAnalyzer
             .ThenBy(r => r.Path, StringComparer.Ordinal)
             .ToList();
 
-        return new AnalysisReport(reports, findings.Where(f => f.Path is null).ToList());
+        return new AnalysisReport(reports, findings.Where(f => f.Path is null).ToList(), ignored.Select(f => f.Path).ToList());
     }
+
+    static (List<T> Matching, List<T> Others) Partition<T>(this List<T> items, Func<T, bool> predicate) =>
+        (items.Where(predicate).ToList(), items.Where(i => !predicate(i)).ToList());
 }
 
 /// <summary>A rough "where to look first" number. The weights are a starting point to tune, not science.</summary>

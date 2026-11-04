@@ -15,6 +15,7 @@ public static class FileClassifier
     {
         ".editorconfig", "global.json", "nuget.config", ".gitlab-ci.yml", "azure-pipelines.yml", "Jenkinsfile",
         "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",
+        Configuration.PrBuddyConfig.FileName,
     };
 
     public static bool IsCSharp(string path) => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);

@@ -9,11 +9,32 @@ public static class GitDiffReader
 {
     static readonly string[] DefaultBaseCandidates = ["origin/main", "origin/master", "main", "master"];
 
+    /// <summary>The repo's C# files at a commit. Dispose it when done; it keeps the repository open.</summary>
+    public static GitSnapshot OpenSnapshot(string repoPath, string commitSha)
+    {
+        var repo = Open(repoPath);
+        try
+        {
+            var commit = repo.Lookup<Commit>(commitSha) ?? throw new PrBuddyException($"Couldn't find commit {commitSha}.");
+            return new GitSnapshot(repo, commit);
+        }
+        catch
+        {
+            repo.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>A file's content at a given commit, or null if it doesn't exist there.</summary>
+    public static string? ReadFile(string repoPath, string commitSha, string path)
+    {
+        using var repo = Open(repoPath);
+        return repo.Lookup<Commit>(commitSha)?[path]?.Target is Blob blob ? blob.GetContentText() : null;
+    }
+
     public static (DiffRange Range, IReadOnlyList<ChangedFile> Files) Read(string repoPath, string? baseRef = null, string headRef = "HEAD")
     {
-        var gitDir = Repository.Discover(Path.GetFullPath(repoPath))
-            ?? throw new PrBuddyException($"No git repository found at '{repoPath}'.");
-        using var repo = new Repository(gitDir);
+        using var repo = Open(repoPath);
 
         baseRef ??= DefaultBaseCandidates.FirstOrDefault(b => repo.Branches[b] is not null)
             ?? throw new PrBuddyException("Couldn't find a main or master branch. Pass the base branch explicitly.");
@@ -45,6 +66,13 @@ public static class GitDiffReader
         }
 
         return (new DiffRange(baseRef, headRef, mergeBase.Sha, headCommit.Sha), files);
+    }
+
+    static Repository Open(string repoPath)
+    {
+        var gitDir = Repository.Discover(Path.GetFullPath(repoPath))
+            ?? throw new PrBuddyException($"No git repository found at '{repoPath}'.");
+        return new Repository(gitDir);
     }
 
     static Commit Resolve(Repository repo, string rev)

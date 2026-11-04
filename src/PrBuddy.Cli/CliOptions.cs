@@ -2,7 +2,7 @@ using PrBuddy.Core;
 
 namespace PrBuddy.Cli;
 
-internal sealed class CliOptions
+public sealed class CliOptions
 {
     public const string Usage = """
         prbuddy: a deterministic sanity check for pull requests
@@ -14,16 +14,25 @@ internal sealed class CliOptions
 
         Options:
           -r, --repo <path>       Repository to analyze (default: current directory)
+          -c, --config <path>     Config file (default: prbuddy.json as it is on the base branch)
               --json              Print the report as JSON
+              --markdown          Print the report as Markdown, for a PR comment
+              --link-base <url>   Turn files and lines into links, e.g. https://github.com/o/r/blob/<sha>
               --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
+                                  (overrides failOn in the config)
               --list-rules        Show the built-in rules
           -h, --help              Show this help
+
+        Exit codes: 0 ok, 1 findings at or above --fail-on, 2 bad input or config.
         """;
 
     public string? BaseRef { get; private set; }
     public string HeadRef { get; private set; } = "HEAD";
     public string RepoPath { get; private set; } = ".";
+    public string? ConfigPath { get; private set; }
+    public string? LinkBase { get; private set; }
     public bool Json { get; private set; }
+    public bool Markdown { get; private set; }
     public bool ListRules { get; private set; }
     public bool Help { get; private set; }
     public Severity? FailOn { get; private set; }
@@ -42,6 +51,15 @@ internal sealed class CliOptions
                     break;
                 case "--json":
                     options.Json = true;
+                    break;
+                case "--markdown":
+                    options.Markdown = true;
+                    break;
+                case "-c" or "--config":
+                    options.ConfigPath = Value(args, ref i);
+                    break;
+                case "--link-base":
+                    options.LinkBase = Value(args, ref i);
                     break;
                 case "--list-rules":
                     options.ListRules = true;
@@ -63,6 +81,8 @@ internal sealed class CliOptions
             }
         }
 
+        if (options.Json && options.Markdown)
+            throw new PrBuddyException("Pick one of --json and --markdown.");
         if (positional.Count > 2)
             throw new PrBuddyException("Expected at most two refs: <base> and <head>.");
         if (positional.Count > 0) options.BaseRef = positional[0];

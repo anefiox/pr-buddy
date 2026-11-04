@@ -71,9 +71,10 @@ public sealed partial class RedundantCommentRule : AddedCodeRule
         var words = Words(comment).Where(w => !StopWords.Contains(w)).Select(Stem).Distinct().ToList();
         if (words.Count == 0 || words.Count > MaxWords) return false;
 
+        // Every word must already be in the code: a single extra word ("toggles", "because") is
+        // usually the one piece of information the comment adds.
         var code = CodeWords(codeLine);
-        var hits = words.Count(code.Contains);
-        return hits * 5 >= words.Count * 4; // at least 80% of the comment is already in the code
+        return words.All(code.Contains);
     }
 
     static HashSet<string> CodeWords(string line)

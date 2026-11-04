@@ -23,6 +23,15 @@ internal static class Pr
     public static IReadOnlyList<Finding> Run(IRule rule, params ChangedFile[] files) =>
         rule.Analyze(new PullRequestContext(files.Select(f => new AnalyzedFile(f)).ToList())).ToList();
 
+    /// <summary>Runs a rule with <paramref name="unchanged"/> as the rest of the repo (path → content).</summary>
+    public static IReadOnlyList<Finding> RunInRepo(IRule rule, IReadOnlyDictionary<string, string> unchanged, params ChangedFile[] files)
+    {
+        var all = new Dictionary<string, string>(unchanged);
+        foreach (var f in files.Where(f => f.NewContent is not null)) all[f.Path] = f.NewContent!;
+        var context = new PullRequestContext(files.Select(f => new AnalyzedFile(f)).ToList(), new InMemorySnapshot(all));
+        return rule.Analyze(context).ToList();
+    }
+
     /// <summary>LCS line diff: which new lines (1-based) were added, and how many old lines were deleted.</summary>
     static (HashSet<int> Added, int Deleted) LineDiff(string? oldText, string? newText)
     {

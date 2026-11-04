@@ -76,10 +76,50 @@ public sealed class AnalyzedFile
         IsCSharp && content is not null ? CSharpSyntaxTree.ParseText(content, ParseOptions, path) : null;
 }
 
-public sealed class PullRequestContext(IReadOnlyList<AnalyzedFile> files)
+public sealed class PullRequestContext
 {
-    public IReadOnlyList<AnalyzedFile> Files { get; } = files;
+    readonly Func<string, bool> _isIgnored;
+    List<(string Path, SyntaxTree Tree)>? _repoTrees;
+
+    /// <param name="snapshot">The whole repo at the PR head. Defaults to just the PR's own files.</param>
+    /// <param name="isIgnored">Paths to leave out of repo-wide searches (from prbuddy.json).</param>
+    public PullRequestContext(IReadOnlyList<AnalyzedFile> files, IRepoSnapshot? snapshot = null, Func<string, bool>? isIgnored = null)
+    {
+        Files = files;
+        Snapshot = snapshot ?? InMemorySnapshot.FromChangedFiles(files.Select(f => f.File));
+        _isIgnored = isIgnored ?? (_ => false);
+    }
+
+    public IReadOnlyList<AnalyzedFile> Files { get; }
 
     /// <summary>Hand-written C# files (generated code is excluded).</summary>
     public IEnumerable<AnalyzedFile> CSharpFiles => Files.Where(f => f.IsCSharp && !f.IsGenerated);
+
+    public IRepoSnapshot Snapshot { get; }
+
+    /// <summary>
+    /// Every hand-written C# file in the repo at the PR head, parsed once and shared between rules.
+    /// Files the PR changed reuse their already-parsed tree.
+    /// </summary>
+    public IReadOnlyList<(string Path, SyntaxTree Tree)> RepoTrees()
+    {
+        if (_repoTrees is not null) return _repoTrees;
+
+        var changed = Files.Where(f => f.IsCSharp && f.NewTree is not null).ToDictionary(f => f.Path, f => f);
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
+        _repoTrees = [];
+        foreach (var path in Snapshot.CSharpPaths)
+        {
+            if (_isIgnored(path)) continue;
+            if (changed.TryGetValue(path, out var file))
+            {
+                if (!file.IsGenerated) _repoTrees.Add((path, file.NewTree!));
+                continue;
+            }
+            var content = Snapshot.Read(path);
+            if (content is null || FileClassifier.IsGenerated(path, content)) continue;
+            _repoTrees.Add((path, CSharpSyntaxTree.ParseText(content, parseOptions, path)));
+        }
+        return _repoTrees;
+    }
 }

@@ -20,10 +20,15 @@ prbuddy [<base>] [<head>] [options]
   <head>   Branch or commit with the changes (default: HEAD)
 
   -r, --repo <path>       Repository to analyze (default: current directory)
+  -c, --config <path>     Config file (default: prbuddy.json as it is on the base branch)
       --json              Print the report as JSON
+      --markdown          Print the report as Markdown, for a PR comment
+      --link-base <url>   Turn files and lines into links, e.g. https://github.com/o/r/blob/<sha>
       --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
       --list-rules        Show the built-in rules
 ```
+
+Exit codes: `0` ok, `1` findings at or above `--fail-on`, `2` bad input or config.
 
 Like GitHub, it diffs from the **merge base**, so commits that landed on `main` after the branch was cut aren't counted.
 
@@ -33,6 +38,29 @@ To install it as a global tool:
 dotnet pack src/PrBuddy.Cli -o nupkg
 dotnet tool install -g PrBuddy --add-source ./nupkg
 ```
+
+## Configuration
+
+Put `prbuddy.json` in the repo root. Comments and trailing commas are allowed.
+
+```jsonc
+{
+  "ignore": ["**/Migrations/**", "*.Designer.cs", "docs/"],
+  "failOn": "warning",
+  "rules": {
+    "PRB008": "off",                  // turn a rule off
+    "PRB004": "info",                 // change its severity
+    "PRB006": { "threshold": 5 },     // rule options
+    "PRB101": { "enabled": false }
+  }
+}
+```
+
+- **`ignore`**: gitignore-style globs. `*` matches within one folder, `**` across folders. A pattern with no `/` matches at any depth.
+- **`rules`**: keyed by rule id. The value is `"off"`, `"on"`, a severity, or an object with `enabled`, `severity` and rule options. A typo in a rule id is reported as an error.
+- **`failOn`**: used when `--fail-on` isn't passed.
+
+**The config is read from the base branch, not from the PR.** Otherwise a PR could add `"PRB001": "off"` and pass its own check. A PR that changes `prbuddy.json` is flagged by PRB201, and the change applies once it's merged. To try a config locally before merging, use `--config prbuddy.json`.
 
 ## What the semantic diff reports
 
@@ -62,33 +90,39 @@ Members that only moved around in the file aren't reported at all. Changes visib
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
 | PRB104 | warning | Test with no assertions, or only `Assert.True(true)`-style ones |
-| PRB201 | info | CI, `.editorconfig` or `Directory.Build.*` changed |
+| PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
 | PRB202 | warning | New NuGet package (version bumps ignored) |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |
+| PRB301 | warning | New private member nothing in its file uses; new internal type nothing in the repo references (info) |
+| PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
+
+PRB301 and PRB302 look at the whole repository at the PR's head, read straight from git, not just the diff. PRB301 matches by name. It skips anything an outside caller might use: members with attributes, overrides, partial/extern members, extension holders, and Unity/Godot callbacks. PRB302 blanks out local names and literals before comparing, so renaming variables doesn't hide a copy. Test methods are skipped, since tests look like their neighbours by design.
 
 ## Layout
 
 ```
 src/PrBuddy.Core
   Git/GitDiffReader.cs        merge-base diff via LibGit2Sharp → ChangedFile
+  Git/GitSnapshot.cs          the repo's C# files at the PR head, for repo-wide rules
   Semantics/                  member-by-member Roslyn diff
   Rules/                      IRule, AddedCodeRule base, the built-in rules
-  PrAnalyzer.cs               runs the rules, scores risk, orders files
-src/PrBuddy.Cli               argument parsing and Spectre.Console output
+  Configuration/              prbuddy.json parsing and glob matching
+  Reporting/                  shared wording and the Markdown report
+  PrAnalyzer.cs               applies config, runs the rules, scores risk, orders files
+src/PrBuddy.Cli               argument parsing, config loading and Spectre.Console output
 tests/PrBuddy.Tests           xUnit; Pr.File(path, before, after) builds a diff without git
+tests/PrBuddy.Cli.Tests       runs the real command against throwaway git repos
 ```
 
 ## Adding a rule
 
 1. For a check on new C# code, derive from `AddedCodeRule` and only report nodes where `file.IsNew(node)` is true. For a cross-file check, derive from `RuleBase`.
 2. Register it in `Rules/DefaultRules.cs`.
-3. Test it with `Pr.Run(new MyRule(), Pr.File("src/A.cs", before, after))`.
+3. Test it with `Pr.Run(new MyRule(), Pr.File("src/A.cs", before, after))`. For rules that use `context.RepoTrees()`, `Pr.RunInRepo` takes the rest of the repo as a dictionary.
 
 ## Ideas for next steps
 
-- `prbuddy.json` config: turn rules off, change severities and thresholds, set ignore paths.
-- GitHub Action that posts the report as a PR comment or check run (the `--json` output is the starting point).
-- Dead additions: new private or internal members with no references. Needs `MSBuildWorkspace` to load the solution.
-- Duplication: new code that closely matches existing code, found by hashing normalized token sequences.
+- GitHub Action that posts the `--markdown` report as a PR comment.
+- Semantic version of PRB301 using `MSBuildWorkspace`, to find unused public members of internal types.
 - NuGet checks for PRB202: download count, publish date, names close to popular packages.
 - Scope creep: flag files far from where most of the PR's changes are.

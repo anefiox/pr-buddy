@@ -8,9 +8,12 @@ namespace PrBuddy.Core.Rules.Code;
 /// PRB006: lots of new null-forgiving operators (x!) in one file. One or two is normal; a pile of them
 /// usually means warnings were silenced rather than handled. null! and default! are ignored as idiomatic.
 /// </summary>
-public sealed class NullForgivingRule : AddedCodeRule
+public sealed class NullForgivingRule(int threshold = NullForgivingRule.DefaultThreshold) : AddedCodeRule
 {
-    public const int Threshold = 3;
+    public const int DefaultThreshold = 3;
+
+    /// <summary>How many new ! in one file before it's worth mentioning. Set with "PRB006": { "threshold": n }.</summary>
+    public int Threshold { get; } = threshold;
 
     public override RuleDescriptor Descriptor { get; } = new("PRB006", "Many null-forgiving operators", Severity.Info, "Suppressions");
 
