@@ -55,6 +55,19 @@ public sealed class TempRepo : IDisposable
         return _repo.Commit(message, Author, Author, new CommitOptions { AllowEmptyCommit = true }).Sha;
     }
 
+    /// <summary>Adds a file to the index without committing.</summary>
+    public TempRepo Stage(string path)
+    {
+        Commands.Stage(_repo, path);
+        return this;
+    }
+
+    public TempRepo SetConfig(string key, string value)
+    {
+        _repo.Config.Set(key, value);
+        return this;
+    }
+
     /// <summary>Creates a branch at HEAD and switches to it.</summary>
     public TempRepo Branch(string name)
     {

@@ -37,3 +37,36 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
 
     public void Dispose() => _repo.Dispose();
 }
+
+/// <summary>The repo's C# files as they are on disk, for --uncommitted.</summary>
+public sealed class WorkingTreeSnapshot : IRepoSnapshot, IDisposable
+{
+    const long MaxFileBytes = 1_000_000;
+    readonly string _workdir;
+
+    internal WorkingTreeSnapshot(string workdir, IReadOnlyList<string> paths)
+    {
+        _workdir = workdir;
+        CSharpPaths = paths;
+    }
+
+    public IReadOnlyList<string> CSharpPaths { get; }
+
+    public string? Read(string path)
+    {
+        var full = Path.Combine(_workdir, path);
+        var info = new FileInfo(full);
+        return info.Exists && info.Length <= MaxFileBytes && !LooksBinary(full) ? File.ReadAllText(full) : null;
+    }
+
+    /// <summary>Same test git uses: a NUL byte in the first 8000 bytes.</summary>
+    internal static bool LooksBinary(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var buffer = new byte[8000];
+        var read = stream.Read(buffer, 0, buffer.Length);
+        return Array.IndexOf(buffer, (byte)0, 0, read) >= 0;
+    }
+
+    public void Dispose() { }
+}

@@ -12,13 +12,17 @@ namespace PrBuddy.Core.Rules.Structure;
 /// so two methods that merely share a shape ("call x, check y, return z") don't match.
 /// Similarity is the Jaccard index of 4-token shingles.
 /// </summary>
-public sealed class DuplicateCodeRule : RuleBase
+/// <param name="similarity">Report at or above this ("PRB302": { "similarity": 0.8 }).</param>
+/// <param name="copySimilarity">Warning at or above this, info below ("copySimilarity": 0.95).</param>
+/// <param name="minTokens">Ignore shorter bodies, which are too generic to call copies ("minTokens": 40).</param>
+public sealed class DuplicateCodeRule(
+    double similarity = DuplicateCodeRule.DefaultSimilarity,
+    double copySimilarity = DuplicateCodeRule.DefaultCopySimilarity,
+    int minTokens = DuplicateCodeRule.DefaultMinTokens) : RuleBase
 {
-    /// <summary>Shorter bodies are too generic to call copies.</summary>
-    public const int MinTokens = 40;
-    public const double Threshold = 0.8;
-    /// <summary>Below this it's "very similar" (info), at or above it's a copy (warning).</summary>
-    public const double CopyThreshold = 0.95;
+    public const int DefaultMinTokens = 40;
+    public const double DefaultSimilarity = 0.8;
+    public const double DefaultCopySimilarity = 0.95;
     const int ShingleSize = 4;
 
     public override RuleDescriptor Descriptor { get; } = new("PRB302", "Duplicated code", Severity.Warning, "Structure");
@@ -27,13 +31,13 @@ public sealed class DuplicateCodeRule : RuleBase
     {
         var candidates = context.CSharpFiles
             .SelectMany(f => AddedMembers.In(f).OfType<BaseMethodDeclarationSyntax>().Select(m => (File: f, Method: m)))
-            .Select(c => (c.File, Fingerprint: Fingerprint.Of(c.File.Path, c.Method)))
+            .Select(c => (c.File, Fingerprint: Fingerprint.Of(c.File.Path, c.Method, minTokens)))
             .Where(c => c.Fingerprint is not null)
             .ToList();
         if (candidates.Count == 0) yield break;
 
         var index = context.RepoTrees()
-            .SelectMany(t => t.Tree.GetRoot().DescendantNodes().OfType<BaseMethodDeclarationSyntax>().Select(m => Fingerprint.Of(t.Path, m)))
+            .SelectMany(t => t.Tree.GetRoot().DescendantNodes().OfType<BaseMethodDeclarationSyntax>().Select(m => Fingerprint.Of(t.Path, m, minTokens)))
             .OfType<Fingerprint>()
             .ToList();
 
@@ -46,11 +50,12 @@ public sealed class DuplicateCodeRule : RuleBase
             {
                 if (other.Path == candidate!.Path && other.Line == candidate.Line) continue; // itself
                 var ratio = (double)other.TokenCount / candidate.TokenCount;
-                if (ratio is < 0.75 or > 1.33) continue; // can't reach the threshold anyway
+                // Jaccard can't exceed the smaller set over the larger, so sizes this far apart can't match.
+                if (ratio < similarity * 0.95 || ratio > 1 / (similarity * 0.95)) continue;
                 var score = Jaccard(candidate.Shingles, other.Shingles);
                 if (score > bestScore) (best, bestScore) = (other, score);
             }
-            if (best is null || bestScore < Threshold) continue;
+            if (best is null || bestScore < similarity) continue;
 
             // Two new copies of each other: say it once.
             var pair = string.CompareOrdinal(candidate!.Key, best.Key) < 0 ? $"{candidate.Key}|{best.Key}" : $"{best.Key}|{candidate.Key}";
@@ -58,7 +63,7 @@ public sealed class DuplicateCodeRule : RuleBase
 
             yield return Report(file.Path, candidate.Line,
                 $"'{candidate.Name}' is {bestScore:P0} similar to '{best.Name}' ({best.Path}:L{best.Line}). Reuse or extract it instead of keeping two copies?",
-                bestScore >= CopyThreshold ? Severity.Warning : Severity.Info);
+                bestScore >= copySimilarity ? Severity.Warning : Severity.Info);
         }
     }
 
@@ -73,7 +78,7 @@ public sealed class DuplicateCodeRule : RuleBase
     {
         public string Key => $"{Path}:{Line}";
 
-        public static Fingerprint? Of(string path, BaseMethodDeclarationSyntax method)
+        public static Fingerprint? Of(string path, BaseMethodDeclarationSyntax method, int minTokens)
         {
             // Tests are similar to their neighbours by design (arrange, act, assert with other inputs).
             if (method is MethodDeclarationSyntax m && Testing.TestSyntax.IsTestMethod(m)) return null;
@@ -82,7 +87,7 @@ public sealed class DuplicateCodeRule : RuleBase
 
             var locals = LocalNames(method);
             var tokens = body.DescendantTokens().Select(t => Normalize(t, locals)).ToList();
-            if (tokens.Count < MinTokens) return null;
+            if (tokens.Count < minTokens) return null;
 
             var shingles = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i + ShingleSize <= tokens.Count; i++)

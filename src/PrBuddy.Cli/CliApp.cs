@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using PrBuddy.Core;
 using PrBuddy.Core.Configuration;
 using PrBuddy.Core.Git;
+using PrBuddy.Core.Packages;
 using PrBuddy.Core.Reporting;
 using Spectre.Console;
 using DefaultRules = PrBuddy.Core.Rules.DefaultRules;
@@ -26,7 +27,8 @@ public static class CliApp
     /// <param name="console">Pretty output (tables, colors).</param>
     /// <param name="stdout">Plain output: help, JSON, Markdown.</param>
     /// <param name="stderr">Errors, kept out of stdout so they never end up inside a redirected report.</param>
-    public static int Run(string[] args, IAnsiConsole console, TextWriter stdout, TextWriter stderr)
+    /// <param name="registry">Used for --online. Null means the real nuget.org (tests pass a fake).</param>
+    public static int Run(string[] args, IAnsiConsole console, TextWriter stdout, TextWriter stderr, IPackageRegistry? registry = null)
     {
         try
         {
@@ -42,10 +44,19 @@ public static class CliApp
                 return Ok;
             }
 
-            var (range, files) = GitDiffReader.Read(options.RepoPath, options.BaseRef, options.HeadRef);
+            var (range, files) = options.Uncommitted
+                ? GitDiffReader.ReadUncommitted(options.RepoPath, options.BaseRef)
+                : GitDiffReader.Read(options.RepoPath, options.BaseRef, options.HeadRef);
             var (config, configSource) = LoadConfig(options, range);
-            using var snapshot = GitDiffReader.OpenSnapshot(options.RepoPath, range.HeadSha);
-            var report = PrAnalyzer.Analyze(files, config: config, snapshot: snapshot);
+            using IDisposable snapshotLifetime = options.Uncommitted
+                ? GitDiffReader.OpenWorkingTreeSnapshot(options.RepoPath)
+                : GitDiffReader.OpenSnapshot(options.RepoPath, range.HeadSha);
+            var snapshot = (IRepoSnapshot)snapshotLifetime;
+            using var http = options.Online && registry is null ? new HttpClient { Timeout = TimeSpan.FromSeconds(10) } : null;
+            if (http is not null) registry = new NuGetOrgRegistry(http);
+            var rules = DefaultRules.Create(config, options.Online ? registry : null);
+            var report = PrAnalyzer.Analyze(files, rules, config, snapshot,
+                history: () => GitDiffReader.ReadHistory(options.RepoPath, range.MergeBaseSha));
 
             if (options.Json)
                 stdout.WriteLine(JsonSerializer.Serialize(new { range, configSource, report }, JsonOptions));

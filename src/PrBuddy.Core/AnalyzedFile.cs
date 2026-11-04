@@ -83,12 +83,23 @@ public sealed class PullRequestContext
 
     /// <param name="snapshot">The whole repo at the PR head. Defaults to just the PR's own files.</param>
     /// <param name="isIgnored">Paths to leave out of repo-wide searches (from prbuddy.json).</param>
-    public PullRequestContext(IReadOnlyList<AnalyzedFile> files, IRepoSnapshot? snapshot = null, Func<string, bool>? isIgnored = null)
+    /// <param name="history">Loads recent commit history on first use; omitted means no history.</param>
+    public PullRequestContext(
+        IReadOnlyList<AnalyzedFile> files,
+        IRepoSnapshot? snapshot = null,
+        Func<string, bool>? isIgnored = null,
+        Func<ChangeHistory>? history = null)
     {
         Files = files;
         Snapshot = snapshot ?? InMemorySnapshot.FromChangedFiles(files.Select(f => f.File));
         _isIgnored = isIgnored ?? (_ => false);
+        _history = new Lazy<ChangeHistory>(history ?? (() => ChangeHistory.Empty));
     }
+
+    readonly Lazy<ChangeHistory> _history;
+
+    /// <summary>Recent commits before the PR. Loaded on first use, because only some rules need it.</summary>
+    public ChangeHistory History => _history.Value;
 
     public IReadOnlyList<AnalyzedFile> Files { get; }
 

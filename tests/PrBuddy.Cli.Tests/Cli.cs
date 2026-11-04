@@ -8,7 +8,9 @@ public sealed record CliResult(int Exit, string Console, string Out, string Err)
 
 public static class Cli
 {
-    public static CliResult Run(params string[] args)
+    public static CliResult Run(params string[] args) => Run(null, args);
+
+    public static CliResult Run(PrBuddy.Core.Packages.IPackageRegistry? registry, params string[] args)
     {
         var console = new StringWriter();
         var stdout = new StringWriter();
@@ -22,7 +24,7 @@ public static class Cli
         });
         ansi.Profile.Width = 250; // wide enough that table cells don't wrap mid-word
 
-        var exit = CliApp.Run(args, ansi, stdout, stderr);
+        var exit = CliApp.Run(args, ansi, stdout, stderr, registry);
         return new CliResult(exit, console.ToString(), stdout.ToString(), stderr.ToString());
     }
 }

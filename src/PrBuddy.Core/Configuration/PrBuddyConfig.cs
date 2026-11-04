@@ -77,6 +77,15 @@ public sealed class PrBuddyConfig
             : throw new PrBuddyException($"{Source}: {ruleId}.{option} must be a positive whole number.");
     }
 
+    /// <summary>A share between 0 and 1, such as PRB302's "similarity": 0.9.</summary>
+    public double GetShare(string ruleId, string option, double fallback)
+    {
+        if (!For(ruleId).Options.TryGetValue(option, out var value)) return fallback;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && number is > 0 and <= 1
+            ? number
+            : throw new PrBuddyException($"{Source}: {ruleId}.{option} must be a number above 0 and at most 1, like 0.9.");
+    }
+
     /// <summary>Catches typos like "PRB01" before they silently do nothing.</summary>
     public void Validate(IEnumerable<string> knownRuleIds)
     {

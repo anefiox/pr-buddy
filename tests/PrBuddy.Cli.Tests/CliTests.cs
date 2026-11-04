@@ -380,6 +380,166 @@ public sealed class CliTests : IDisposable
         Assert.Empty(result.Out); // the error must not end up inside the JSON
     }
 
+    // ---------- --uncommitted ----------
+
+    [Fact]
+    public void Uncommitted_sees_unstaged_edits()
+    {
+        _repo.Write("src/Shop/Cart.cs", CleanClass).Commit("initial");
+        _repo.Write("src/Shop/Cart.cs", SloppyClass); // not staged, not committed
+
+        Assert.DoesNotContain("PRB001", Run("main", "HEAD").Console); // nothing committed yet
+
+        var result = Run("--uncommitted");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("main...working tree", result.Console);
+        Assert.Contains("PRB001 L11", result.Console);
+    }
+
+    [Fact]
+    public void Uncommitted_sees_staged_and_untracked_files_but_not_ignored_ones()
+    {
+        _repo.Write(".gitignore", "bin/\n").Write("src/A.cs", "class A { }").Commit("initial");
+        _repo.Write("src/Staged.cs", "class Staged { void M() { try { } catch { } } }").Stage("src/Staged.cs");
+        _repo.Write("src/New.cs", "class New { void M() { try { } catch { } } }");
+        _repo.Write("bin/Generated.cs", "class Junk { void M() { try { } catch { } } }");
+
+        var result = Run("--uncommitted");
+        Assert.Contains("src/Staged.cs", result.Console);
+        Assert.Contains("src/New.cs", result.Console);
+        Assert.DoesNotContain("bin/Generated.cs", result.Console);
+    }
+
+    [Fact]
+    public void Uncommitted_includes_what_the_branch_already_committed()
+    {
+        _repo.Write("src/A.cs", "class A { }").Commit("initial");
+        _repo.Branch("feature").Write("src/Committed.cs", "class C { void M() { try { } catch { } } }").Commit("on branch");
+        _repo.Write("src/Pending.cs", "class P { void M() { try { } catch { } } }");
+
+        var result = Run("--uncommitted");
+        Assert.Contains("src/Committed.cs", result.Console);
+        Assert.Contains("src/Pending.cs", result.Console);
+    }
+
+    [Fact]
+    public void Uncommitted_reports_deleted_files()
+    {
+        _repo.Write("src/Old.cs", "public class Old { public void M() { } }").Write("src/Keep.cs", "class Keep { }").Commit("initial");
+        _repo.Delete("src/Old.cs");
+
+        Assert.Contains("deleted: 2 removed", Run("--uncommitted").Console);
+    }
+
+    [Fact]
+    public void Uncommitted_on_a_clean_tree_has_nothing_to_report()
+    {
+        _repo.Write("src/A.cs", "class A { }").Commit("initial");
+        var result = Run("--uncommitted");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("No changes to review", result.Console);
+    }
+
+    [Fact]
+    public void Uncommitted_takes_a_base_but_no_head()
+    {
+        var result = Cli.Run("--uncommitted", "main", "feature");
+        Assert.Equal(2, result.Exit);
+        Assert.Contains("takes a base ref but no head ref", result.Err);
+    }
+
+    [Fact]
+    public void Uncommitted_needs_at_least_one_commit()
+    {
+        var result = Run("--uncommitted", "main");
+        Assert.Equal(2, result.Exit);
+        Assert.Contains("no commits yet", result.Err);
+    }
+
+    [Fact]
+    public void Uncommitted_repo_wide_rules_see_untracked_files()
+    {
+        _repo.Write("src/A.cs", "class A { }").Commit("initial");
+        _repo.Write("src/Helper.cs", "internal static class Helper { public static int One() => 1; }");
+        _repo.Write("src/Caller.cs", "public class Caller { public int M() => Helper.One(); }");
+
+        // Helper is only used from another untracked file, so this proves the snapshot includes it.
+        var result = Run("--uncommitted");
+        Assert.DoesNotContain("'Helper'", result.Console);
+        Assert.DoesNotContain("PRB301", result.Console);
+    }
+
+    [Fact]
+    public void Uncommitted_ignores_crlf_checkouts()
+    {
+        // Windows default: git stores LF, the working tree has CRLF.
+        _repo.SetConfig("core.autocrlf", "true");
+        var lf = CleanClass.Replace("\r\n", "\n");
+        _repo.Write("src/Shop/Cart.cs", lf).Commit("initial");
+        _repo.Write("src/Shop/Cart.cs", lf.Replace("return items.Length;", "return items.Length + 1;").Replace("\n", "\r\n"));
+
+        var result = Run("--uncommitted");
+        Assert.Contains("1 real member changes", result.Console);
+        Assert.DoesNotContain("formatting or comment changes", result.Console);
+    }
+
+    // ---------- scope creep with real history ----------
+
+    static string Fields(int count, string tag) =>
+        "class C" + tag + " {\n" + string.Concat(Enumerable.Range(0, count).Select(i => $"    int F{i};\n")) + "}\n";
+
+    [Fact]
+    public void Scope_creep_uses_git_history_to_tell_partners_from_strays()
+    {
+        _repo.Write("src/Game/Player.cs", Fields(1, "P")).Write("tools/Check/Probe.cs", Fields(1, "Q")).Write("src/Billing/Invoice.cs", Fields(1, "B")).Commit("initial");
+        // Game and its check tool always change together.
+        for (var i = 2; i <= 4; i++)
+            _repo.Write("src/Game/Player.cs", Fields(i, "P")).Write("tools/Check/Probe.cs", Fields(i, "Q")).Commit($"together {i}");
+
+        _repo.Branch("feature")
+            .Write("src/Game/Player.cs", Fields(60, "P"))
+            .Write("src/Game/Enemy.cs", Fields(40, "E"))
+            .Write("tools/Check/Probe.cs", Fields(6, "Q"))
+            .Write("src/Billing/Invoice.cs", Fields(3, "B"))
+            .Commit();
+
+        var result = Run("main", "feature");
+        Assert.Contains("PRB303", result.Console);
+        Assert.Contains("src/Billing/Invoice.cs", result.Console);
+        Assert.DoesNotContain("tools/Check/Probe.cs (", result.Console);
+    }
+
+    // ---------- --online ----------
+
+    sealed class CountingRegistry : PrBuddy.Core.Packages.IPackageRegistry
+    {
+        public int Calls { get; private set; }
+        public PrBuddy.Core.Packages.PackageInfo? Lookup(string id)
+        {
+            Calls++;
+            return new(id, Exists: false);
+        }
+    }
+
+    [Fact]
+    public void Packages_are_only_looked_up_with_online()
+    {
+        const string project = "<Project Sdk=\"Microsoft.NET.Sdk\">\n</Project>\n";
+        _repo.Write("src/A/A.csproj", project).Commit("initial");
+        _repo.Branch("feature")
+            .Write("src/A/A.csproj", project.Replace("</Project>", "  <ItemGroup>\n    <PackageReference Include=\"Made.Up\" Version=\"1.0.0\" />\n  </ItemGroup>\n</Project>"))
+            .Commit();
+        var registry = new CountingRegistry();
+
+        var offline = Cli.Run(registry, "main", "feature", "--repo", _repo.Dir);
+        Assert.Equal(0, registry.Calls);
+        Assert.Contains("New package dependency 'Made.Up'", offline.Console);
+
+        var online = Cli.Run(registry, "main", "feature", "--online", "--repo", _repo.Dir);
+        Assert.Equal(1, registry.Calls);
+        Assert.Contains("'Made.Up' isn't on nuget.org", online.Console);
+    }
+
     // ---------- repo-wide rules ----------
 
     [Fact]

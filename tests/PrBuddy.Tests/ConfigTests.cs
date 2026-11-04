@@ -98,6 +98,51 @@ public class ConfigTests
         Assert.DoesNotContain(relaxed.AllFindings, f => f.RuleId == "PRB006");
     }
 
+    [Fact]
+    public void Share_options_are_validated()
+    {
+        var good = PrBuddyConfig.Parse("""{ "rules": { "PRB302": { "similarity": 0.9 } } }""", "test");
+        Assert.Equal(0.9, good.GetShare("PRB302", "similarity", 0.8));
+        Assert.Equal(0.8, good.GetShare("PRB303", "focusShare", 0.8));
+
+        foreach (var bad in new[] { "1.5", "0", "\"high\"" })
+        {
+            var config = PrBuddyConfig.Parse($$"""{ "rules": { "PRB302": { "similarity": {{bad}} } } }""", "custom.json");
+            var ex = Assert.Throws<PrBuddyException>(() => config.GetShare("PRB302", "similarity", 0.8));
+            Assert.Contains("custom.json: PRB302.similarity must be a number above 0 and at most 1", ex.Message);
+        }
+    }
+
+    [Fact]
+    public void Duplicate_thresholds_reach_the_rule()
+    {
+        const string original = """
+            public static class Text
+            {
+                public static string Slugify(string input)
+                {
+                    var builder = new System.Text.StringBuilder();
+                    foreach (var c in input.Trim().ToLowerInvariant())
+                    {
+                        if (char.IsLetterOrDigit(c)) builder.Append(c);
+                        else if (char.IsWhiteSpace(c) || c == '-') builder.Append('-');
+                    }
+                    return builder.ToString().Trim('-');
+                }
+            }
+            """;
+        var copy = original.Replace("class Text", "class Urls").Replace("Slugify", "ToPart").Replace("ToLowerInvariant", "ToUpperInvariant");
+        var files = new[] { Pr.File("src/Text.cs", original, original), Pr.File("src/Urls.cs", null, copy) };
+
+        var defaults = PrAnalyzer.Analyze(files);
+        var strict = PrAnalyzer.Analyze(files, config: PrBuddyConfig.Parse("""{ "rules": { "PRB302": { "similarity": 0.99 } } }""", "test"));
+        var loud = PrAnalyzer.Analyze(files, config: PrBuddyConfig.Parse("""{ "rules": { "PRB302": { "copySimilarity": 0.8 } } }""", "test"));
+
+        Assert.Equal(Severity.Info, defaults.AllFindings.Single(f => f.RuleId == "PRB302").Severity);
+        Assert.DoesNotContain(strict.AllFindings, f => f.RuleId == "PRB302");
+        Assert.Equal(Severity.Warning, loud.AllFindings.Single(f => f.RuleId == "PRB302").Severity);
+    }
+
     [Theory]
     [InlineData("**/Migrations/**", "src/Data/Migrations/0001.cs", true)]
     [InlineData("**/Migrations/**", "Migrations/0001.cs", true)]

@@ -133,6 +133,107 @@ public class StructureRuleTests
         Assert.Empty(Pr.Run(new UnusedNewCodeRule(), Pr.File("src/Entry.cs", null, "class Entry { static void Main() { } }")));
     }
 
+    // ---------- PRB303: scope creep ----------
+
+    static string Lines(int count) => "class C {\n" + string.Concat(Enumerable.Range(0, count).Select(i => $"    int F{i};\n")) + "}\n";
+
+    [Fact]
+    public void A_stray_file_outside_the_main_area_is_reported()
+    {
+        var findings = Pr.Run(new ScopeCreepRule(),
+            Pr.File("src/Auth/Login.cs", null, Lines(40)),
+            Pr.File("src/Auth/Session.cs", null, Lines(30)),
+            Pr.File("src/Billing/Invoice.cs", null, Lines(2)),
+            Pr.File("tests/Auth.Tests/LoginTests.cs", null, Lines(50))); // tests don't count
+
+        var finding = Assert.Single(findings);
+        Assert.Null(finding.Path);
+        Assert.Contains("95% of the changed code is in src/Auth", finding.Message);
+        Assert.Contains("src/Billing/Invoice.cs (4 lines)", finding.Message);
+    }
+
+    [Fact]
+    public void Areas_that_usually_change_together_are_partners_not_strays()
+    {
+        var files = new[]
+        {
+            Pr.File("src/Auth/Login.cs", null, Lines(40)),
+            Pr.File("src/Auth/Session.cs", null, Lines(30)),
+            Pr.File("src/Common/Strings.cs", null, Lines(2)),
+            Pr.File("src/Billing/Invoice.cs", null, Lines(2)),
+        };
+        // Auth and Common changed together three times before; Auth and Billing never did.
+        var together = new HashSet<string> { "src/Auth/Login.cs", "src/Common/Strings.cs" };
+        var history = new ChangeHistory([together, together, together, new HashSet<string> { "src/Billing/X.cs" }]);
+        var context = new PullRequestContext(files.Select(f => new AnalyzedFile(f)).ToList(), history: () => history);
+
+        var finding = Assert.Single(new ScopeCreepRule().Analyze(context));
+        Assert.Contains("src/Billing/Invoice.cs", finding.Message);
+        Assert.DoesNotContain("src/Common", finding.Message);
+    }
+
+    [Fact]
+    public void Shared_libraries_are_partners_even_of_brand_new_areas()
+    {
+        var files = new[]
+        {
+            Pr.File("src/Sed/SedCommand.cs", null, Lines(60)), // a new tool: no history at all
+            Pr.File("src/Sed/SedRunner.cs", null, Lines(40)),
+            Pr.File("src/Common/Regex.cs", null, Lines(3)),
+        };
+        // Common has changed alongside three different tools before.
+        var history = new ChangeHistory(
+        [
+            new HashSet<string> { "src/Common/A.cs", "src/Grep/G.cs" },
+            new HashSet<string> { "src/Common/A.cs", "src/Sort/S.cs" },
+            new HashSet<string> { "src/Common/A.cs", "src/Tail/T.cs" },
+        ]);
+        var context = new PullRequestContext(files.Select(f => new AnalyzedFile(f)).ToList(), history: () => history);
+
+        Assert.Empty(new ScopeCreepRule().Analyze(context));
+    }
+
+    [Fact]
+    public void History_is_only_loaded_when_there_is_a_candidate_stray()
+    {
+        var loaded = false;
+        var files = new[] { Pr.File("src/Auth/A.cs", null, Lines(10)), Pr.File("src/Auth/B.cs", null, Lines(10)), Pr.File("src/Auth/C.cs", null, Lines(10)) };
+        var context = new PullRequestContext(files.Select(f => new AnalyzedFile(f)).ToList(), history: () => { loaded = true; return ChangeHistory.Empty; });
+
+        Assert.Empty(new ScopeCreepRule().Analyze(context));
+        Assert.False(loaded);
+    }
+
+    [Fact]
+    public void Evenly_spread_or_cross_cutting_changes_are_not_scope_creep()
+    {
+        // Spread across areas: no main area.
+        Assert.Empty(Pr.Run(new ScopeCreepRule(),
+            Pr.File("src/Auth/Login.cs", null, Lines(20)),
+            Pr.File("src/Billing/Invoice.cs", null, Lines(20)),
+            Pr.File("src/Orders/Order.cs", null, Lines(20))));
+
+        // A rename touching many areas: too many strays to be an accident.
+        Assert.Empty(Pr.Run(new ScopeCreepRule(),
+            [Pr.File("src/Core/Big.cs", null, Lines(200)), .. Enumerable.Range(0, 5).Select(i => Pr.File($"src/Area{i}/F.cs", null, Lines(1)))]));
+    }
+
+    [Fact]
+    public void Small_prs_are_left_alone()
+    {
+        Assert.Empty(Pr.Run(new ScopeCreepRule(),
+            Pr.File("src/Auth/Login.cs", null, Lines(40)),
+            Pr.File("Program.cs", null, Lines(1))));
+    }
+
+    [Theory]
+    [InlineData("src/Auth/Login.cs", "src/Auth")]
+    [InlineData("src/Auth/Deep/Down/Login.cs", "src/Auth")]
+    [InlineData("Program.cs", "(root)")]
+    [InlineData("lib/X.cs", "lib")]
+    public void Area_is_the_first_two_folders(string path, string expected) =>
+        Assert.Equal(expected, ScopeCreepRule.AreaOf(path));
+
     // ---------- PRB302: duplicated code ----------
 
     const string ExistingHelper = """

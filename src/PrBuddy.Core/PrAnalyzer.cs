@@ -40,7 +40,8 @@ public static class PrAnalyzer
         IEnumerable<ChangedFile> files,
         IEnumerable<IRule>? rules = null,
         PrBuddyConfig? config = null,
-        IRepoSnapshot? snapshot = null)
+        IRepoSnapshot? snapshot = null,
+        Func<ChangeHistory>? history = null)
     {
         config ??= PrBuddyConfig.Default;
         var ruleList = (rules ?? DefaultRules.Create(config)).ToList();
@@ -48,7 +49,7 @@ public static class PrAnalyzer
 
         var (ignored, kept) = files.ToList().Partition(f => config.IsIgnored(f.Path));
         var analyzed = kept.Select(f => new AnalyzedFile(f)).ToList();
-        var context = new PullRequestContext(analyzed, snapshot, config.IsIgnored);
+        var context = new PullRequestContext(analyzed, snapshot, config.IsIgnored, history);
 
         var findings = new List<Finding>();
         foreach (var rule in ruleList)
@@ -107,7 +108,9 @@ public static class RiskScorer
         {
             // Test methods are public by convention, so "public API" means nothing there.
             var apiMatters = file.Kind != FileKind.Test;
-            score += diff.Changes.Sum(c => Weight(c, apiMatters));
+            var changes = diff.Changes.Sum(c => Weight(c, apiMatters));
+            // Test changes count half, so a big new test file doesn't outrank the code it tests.
+            score += file.Kind == FileKind.Test ? (changes + 1) / 2 : changes;
         }
         else
         {

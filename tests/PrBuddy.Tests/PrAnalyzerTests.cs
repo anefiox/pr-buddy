@@ -22,6 +22,17 @@ public class PrAnalyzerTests
     }
 
     [Fact]
+    public void Production_code_outranks_a_bigger_test_file()
+    {
+        var prod = Pr.File("src/Cart.cs", "public class Cart { public int A() => 1; }", "public class Cart { public int A() => 2; public int B() => 3; }");
+        var tests = Pr.File("tests/CartTests.cs", null,
+            "public class CartTests { " + string.Concat(Enumerable.Range(0, 6).Select(i => $"[Fact] public void T{i}() => Assert.Equal({i}, {i} + 0); ")) + "}");
+
+        var report = PrAnalyzer.Analyze([tests, prod]);
+        Assert.Equal("src/Cart.cs", report.ReviewFiles.First().Path);
+    }
+
+    [Fact]
     public void A_crashing_rule_becomes_a_finding_instead_of_an_exception()
     {
         var report = PrAnalyzer.Analyze([Pr.File("src/A.cs", null, "class A { }")], [new CrashingRule()]);
