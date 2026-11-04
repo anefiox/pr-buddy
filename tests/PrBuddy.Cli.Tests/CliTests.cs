@@ -62,7 +62,7 @@ public sealed class CliTests : IDisposable
 
     [Theory]
     [InlineData(new[] { "--bogus" }, "Unknown option '--bogus'")]
-    [InlineData(new[] { "--json", "--markdown" }, "Pick one of --json and --markdown")]
+    [InlineData(new[] { "--json", "--markdown" }, "Pick one of --json, --markdown and --sarif")]
     [InlineData(new[] { "--fail-on", "loud" }, "--fail-on expects info, warning or critical")]
     [InlineData(new[] { "--fail-on", "7" }, "--fail-on expects info, warning or critical")]
     [InlineData(new[] { "--repo" }, "--repo needs a value")]
@@ -107,6 +107,26 @@ public sealed class CliTests : IDisposable
         Assert.Equal(0, result.Exit);
         foreach (var id in new[] { "PRB001", "PRB008", "PRB101", "PRB104", "PRB201", "PRB203" })
             Assert.Contains(id, result.Console);
+    }
+
+    [Fact]
+    public void Explain_shows_why_what_to_do_and_options()
+    {
+        var result = Cli.Run("--explain", "prb302");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("PRB302 Duplicated code", result.Console);
+        Assert.Contains("Why it matters", result.Console);
+        Assert.Contains("What to do", result.Console);
+        Assert.Contains("copySimilarity", result.Console);
+        Assert.Contains("// prbuddy-ignore PRB302: why this is fine here", result.Console);
+    }
+
+    [Fact]
+    public void Explain_an_unknown_rule_is_an_error()
+    {
+        var result = Cli.Run("--explain", "PRB999");
+        Assert.Equal(2, result.Exit);
+        Assert.Contains("There's no rule 'PRB999'", result.Err);
     }
 
     [Fact]
@@ -277,6 +297,19 @@ public sealed class CliTests : IDisposable
         Assert.Contains("[L11](https://example.test/blob/x/src/Shop/Cart.cs#L11)", result.Out);
     }
 
+    [Fact]
+    public void Sarif_output_is_plain_stdout_and_valid_json()
+    {
+        Pr(SloppyClass);
+        var result = Run("main", "feature", "--sarif");
+
+        Assert.Equal(0, result.Exit);
+        Assert.Empty(result.Console);
+        using var json = JsonDocument.Parse(result.Out);
+        var results = json.RootElement.GetProperty("runs")[0].GetProperty("results");
+        Assert.Contains(results.EnumerateArray(), r => r.GetProperty("ruleId").GetString() == "PRB001");
+    }
+
     // ---------- config ----------
 
     [Fact]
@@ -378,6 +411,25 @@ public sealed class CliTests : IDisposable
         Assert.Equal(2, result.Exit);
         Assert.Contains("isn't valid JSON", result.Err);
         Assert.Empty(result.Out); // the error must not end up inside the JSON
+    }
+
+    // ---------- suppressions ----------
+
+    [Fact]
+    public void Suppressed_findings_are_listed_with_their_reason_and_do_not_fail_the_build()
+    {
+        Pr(System.Text.RegularExpressions.Regex.Replace(SloppyClass, @"^(\s*)catch", "$1// prbuddy-ignore PRB001: length can't throw; kept for the demo\n$1catch",
+            System.Text.RegularExpressions.RegexOptions.Multiline));
+        _repo.Write("tests/CartTests.cs", "public class CartTests { [Fact] public void A() => Assert.Equal(0, 0 + new Shop.Cart().Count([])); }").Commit();
+
+        var result = Run("main", "feature", "--fail-on", "warning");
+        Assert.True(result.Exit == 0, result.Console);
+        Assert.True(result.Console.Contains("1 suppressed by comment"), result.Console);
+        Assert.Contains("Suppressed by comment (1)", result.Console);
+        Assert.Contains("PRB001 src/Shop/Cart.cs:L12: length can't throw; kept for the demo", result.Console);
+
+        var md = Run("main", "feature", "--markdown").Out;
+        Assert.Contains("<summary>Suppressed by comment (1)</summary>", md);
     }
 
     // ---------- --uncommitted ----------

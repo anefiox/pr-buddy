@@ -30,6 +30,46 @@ internal sealed class ConsoleReport(IAnsiConsole console)
         WriteSkimList(report);
         foreach (var file in report.ReviewFiles)
             WriteFileDetails(file);
+        WriteSuppressed(report.Suppressed);
+    }
+
+    /// <summary>Shown, not hidden: a reviewer should see what was waved through and why.</summary>
+    void WriteSuppressed(IReadOnlyList<SuppressedFinding> suppressed)
+    {
+        if (suppressed.Count == 0) return;
+        console.MarkupLine($"[bold]Suppressed by comment[/] [grey]({suppressed.Count})[/]");
+        foreach (var s in suppressed)
+            console.MarkupLine($"  [grey]{Esc(ReportText.SuppressedLine(s))}[/]");
+        console.WriteLine();
+    }
+
+    public void WriteExplanation(RuleDescriptor rule, RuleDoc doc)
+    {
+        console.Write(new Spectre.Console.Rule($"[bold]{rule.Id}[/] {Esc(rule.Title)}") { Justification = Justify.Left });
+        console.MarkupLine($"[grey]{SeverityMarkup(rule.DefaultSeverity)} · {Esc(rule.Category)}[/]");
+        console.WriteLine();
+        console.MarkupLine("[bold]Why it matters[/]");
+        console.WriteLine(doc.Why);
+        console.WriteLine();
+        console.MarkupLine("[bold]What to do[/]");
+        console.WriteLine(doc.Fix);
+        console.WriteLine();
+
+        if (doc.Options.Count > 0)
+        {
+            var table = new Table { Border = TableBorder.Rounded, Title = new TableTitle("Options") };
+            table.AddColumn("Option");
+            table.AddColumn("Default");
+            table.AddColumn("Meaning");
+            foreach (var option in doc.Options) table.AddRow(Esc(option.Name), Esc(option.Default), Esc(option.Meaning));
+            console.Write(table);
+            console.WriteLine();
+        }
+
+        var example = doc.Options.Count > 0 ? $"{{ \"{doc.Options[0].Name}\": {doc.Options[0].Default} }}" : "\"info\"";
+        console.MarkupLine("[bold]Configure or allow it[/]");
+        console.MarkupLine($"  [grey]In one place:[/]  {Esc($"// prbuddy-ignore {rule.Id}: why this is fine here")}");
+        console.MarkupLine($"  [grey]Repo-wide:[/]     {Esc($"prbuddy.json → \"rules\": {{ \"{rule.Id}\": \"off\" }}  or  {example}")}");
     }
 
     public void WriteRules(IEnumerable<IRule> rules)
@@ -39,7 +79,7 @@ internal sealed class ConsoleReport(IAnsiConsole console)
         table.AddColumn("Severity");
         table.AddColumn("Category");
         table.AddColumn("Rule");
-        foreach (var d in rules.Select(r => r.Descriptor))
+        foreach (var d in rules.Select(r => r.Descriptor).Append(SuppressionCheck.Descriptor))
             table.AddRow(d.Id, SeverityMarkup(d.DefaultSeverity), Esc(d.Category), Esc(d.Title));
         console.Write(table);
     }
@@ -47,7 +87,8 @@ internal sealed class ConsoleReport(IAnsiConsole console)
     void WriteSummary(AnalysisReport report)
     {
         var s = ReportText.Summarize(report);
-        var ignored = s.IgnoredFiles > 0 ? $"  ·  [grey]{s.IgnoredFiles} ignored by config[/]" : "";
+        var ignored = (s.IgnoredFiles > 0 ? $"  ·  [grey]{s.IgnoredFiles} ignored by config[/]" : "")
+                    + (s.Suppressed > 0 ? $"  ·  [grey]{s.Suppressed} suppressed by comment[/]" : "");
         console.MarkupLine(
             $"{s.Files} files  [green]+{s.AddedLines}[/] [red]-{s.DeletedLines}[/]  ·  [bold]{s.RealChanges}[/] real member changes" +
             $"  ·  {s.CosmeticFiles} cosmetic-only files  ·  {FindingCounts(report.AllFindings)}{ignored}");

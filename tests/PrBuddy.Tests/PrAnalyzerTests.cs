@@ -43,6 +43,14 @@ public class PrAnalyzerTests
     }
 
     [Fact]
+    public void Every_rule_is_documented_for_explain()
+    {
+        var ids = DefaultRules.Create().Select(r => r.Descriptor.Id).Append(SuppressionCheck.Descriptor.Id).ToList();
+        Assert.All(ids, id => Assert.NotNull(RuleDocs.For(id)));
+        Assert.Empty(RuleDocs.DocumentedIds.Except(ids)); // no docs for rules that don't exist
+    }
+
+    [Fact]
     public void Rule_ids_are_unique()
     {
         var ids = DefaultRules.Create().Select(r => r.Descriptor.Id).ToList();

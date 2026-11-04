@@ -38,6 +38,14 @@ public static class CliApp
                 stdout.WriteLine(CliOptions.Usage);
                 return Ok;
             }
+            if (options.Explain is { } ruleId)
+            {
+                var descriptor = DefaultRules.Create().Select(r => r.Descriptor).Append(SuppressionCheck.Descriptor)
+                    .FirstOrDefault(d => string.Equals(d.Id, ruleId, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new PrBuddyException($"There's no rule '{ruleId}'. Run prbuddy --list-rules.");
+                new ConsoleReport(console).WriteExplanation(descriptor, PrBuddy.Core.Rules.RuleDocs.For(descriptor.Id)!);
+                return Ok;
+            }
             if (options.ListRules)
             {
                 new ConsoleReport(console).WriteRules(DefaultRules.Create());
@@ -60,6 +68,8 @@ public static class CliApp
 
             if (options.Json)
                 stdout.WriteLine(JsonSerializer.Serialize(new { range, configSource, report }, JsonOptions));
+            else if (options.Sarif)
+                stdout.WriteLine(SarifReport.Render(report, rules.Select(r => r.Descriptor).Append(SuppressionCheck.Descriptor)));
             else if (options.Markdown)
                 stdout.Write(MarkdownReport.Render(range, report, options.LinkBase, configSource));
             else

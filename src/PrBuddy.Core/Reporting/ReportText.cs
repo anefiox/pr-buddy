@@ -2,7 +2,7 @@ using PrBuddy.Core.Semantics;
 
 namespace PrBuddy.Core.Reporting;
 
-public sealed record ReportSummary(int Files, int AddedLines, int DeletedLines, int RealChanges, int CosmeticFiles, int IgnoredFiles);
+public sealed record ReportSummary(int Files, int AddedLines, int DeletedLines, int RealChanges, int CosmeticFiles, int IgnoredFiles, int Suppressed);
 
 /// <summary>Wording shared by every output format, so the console and the PR comment say the same thing.</summary>
 public static class ReportText
@@ -13,7 +13,12 @@ public static class ReportText
         report.Files.Sum(f => f.DeletedLines),
         report.Files.Sum(f => f.SemanticDiff?.RealChangeCount ?? 0),
         report.Files.Count(f => f.Kind != FileKind.Generated && f.SemanticDiff is { IsCosmeticOnly: true }),
-        report.IgnoredPaths.Count);
+        report.IgnoredPaths.Count,
+        report.Suppressed.Count);
+
+    /// <summary>"src/A.cs:L12 PRB001 (empty catch...): reason"</summary>
+    public static string SuppressedLine(SuppressedFinding s) =>
+        $"{s.Finding.RuleId} {s.Finding.Path}{(s.Finding.Line is { } l ? $":L{l}" : "")}: {s.Reason}";
 
     /// <summary>Test methods are public by convention, so "public API" is noise there.</summary>
     public static bool ShowsPublicApi(FileReport file) => file.Kind != FileKind.Test;

@@ -23,10 +23,12 @@ public sealed record FileReport(
 
 /// <param name="Files">In suggested reading order: riskiest first, skimmable files last.</param>
 /// <param name="IgnoredPaths">Changed files left out because prbuddy.json ignores them.</param>
+/// <param name="Suppressed">Findings waved through by a prbuddy-ignore comment, with the reason given.</param>
 public sealed record AnalysisReport(
     IReadOnlyList<FileReport> Files,
     IReadOnlyList<Finding> PullRequestFindings,
-    IReadOnlyList<string> IgnoredPaths)
+    IReadOnlyList<string> IgnoredPaths,
+    IReadOnlyList<SuppressedFinding> Suppressed)
 {
     [JsonIgnore] public IEnumerable<FileReport> ReviewFiles => Files.Where(f => !f.IsSkimmable);
     [JsonIgnore] public IEnumerable<FileReport> SkimFiles => Files.Where(f => f.IsSkimmable);
@@ -45,7 +47,8 @@ public static class PrAnalyzer
     {
         config ??= PrBuddyConfig.Default;
         var ruleList = (rules ?? DefaultRules.Create(config)).ToList();
-        config.Validate(ruleList.Select(r => r.Descriptor.Id));
+        var knownIds = ruleList.Select(r => r.Descriptor.Id).Append(SuppressionCheck.Descriptor.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        config.Validate(knownIds);
 
         var (ignored, kept) = files.ToList().Partition(f => config.IsIgnored(f.Path));
         var analyzed = kept.Select(f => new AnalyzedFile(f)).ToList();
@@ -69,6 +72,12 @@ public static class PrAnalyzer
             }
         }
 
+        var (remaining, suppressed, problems) = SuppressionCheck.Apply(analyzed, findings, knownIds);
+        var check = config.For(SuppressionCheck.Descriptor.Id);
+        if (check.Enabled)
+            remaining.AddRange(check.Severity is { } s ? problems.Select(p => p with { Severity = s }) : problems);
+        findings = remaining;
+
         var byPath = findings.Where(f => f.Path is not null).ToLookup(f => f.Path!, StringComparer.Ordinal);
         var reports = analyzed
             .Select(file =>
@@ -83,7 +92,7 @@ public static class PrAnalyzer
             .ThenBy(r => r.Path, StringComparer.Ordinal)
             .ToList();
 
-        return new AnalysisReport(reports, findings.Where(f => f.Path is null).ToList(), ignored.Select(f => f.Path).ToList());
+        return new AnalysisReport(reports, findings.Where(f => f.Path is null).ToList(), ignored.Select(f => f.Path).ToList(), suppressed);
     }
 
     static (List<T> Matching, List<T> Others) Partition<T>(this List<T> items, Func<T, bool> predicate) =>

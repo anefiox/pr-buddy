@@ -24,10 +24,12 @@ prbuddy [<base>] [<head>] [options]
   -c, --config <path>     Config file (default: prbuddy.json as it is on the base branch)
       --json              Print the report as JSON
       --markdown          Print the report as Markdown, for a PR comment
+      --sarif             Print the report as SARIF 2.1.0, for IDEs and code scanning
       --link-base <url>   Turn files and lines into links, e.g. https://github.com/o/r/blob/<sha>
       --online            Look new NuGet packages up on nuget.org
       --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
       --list-rules        Show the built-in rules
+      --explain <rule>    Why a rule exists, what to do about it, and its options
 ```
 
 Exit codes: `0` ok, `1` findings at or above `--fail-on`, `2` bad input or config.
@@ -41,6 +43,31 @@ prbuddy --uncommitted
 ```
 
 This checks everything you'd commit right now (staged, unstaged and new untracked files, respecting `.gitignore`), plus whatever the branch has already committed. It's handy for checking an AI agent's work before it goes anywhere. Nothing is staged, committed or written.
+
+### Allowing a finding in one place
+
+When a finding is wrong for one line but the rule is right in general, say so in a comment. **A reason is required:**
+
+```csharp
+// prbuddy-ignore PRB001: temp files; the OS cleans them up anyway
+catch (IOException) { }
+
+task.Wait(); // prbuddy-ignore PRB004: runs on a dedicated background thread
+```
+
+- A comment on its own line covers the next line of code; a comment after code covers that line.
+- Several rules at once: `prbuddy-ignore PRB001, PRB002: …`. A whole file: `prbuddy-ignore-file PRB301: …`.
+- It works in any file type: `<!-- prbuddy-ignore PRB202: … -->` in a `.csproj`, `# prbuddy-ignore …` in `.editorconfig`.
+- Suppressed findings aren't hidden. The report lists each one with its reason, so a reviewer sees what was waved through and why. They don't count toward `--fail-on` or risk scores. In SARIF they're marked as suppressed in source, with the justification.
+- A suppression with no reason, or naming a rule that doesn't exist, isn't applied and is reported as PRB900. So is a suppression the PR adds that matches nothing, as info.
+
+### SARIF
+
+`--sarif` writes the report as [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html), the standard format for static analysis results. Open it with the SARIF Viewer extension in VS Code or Visual Studio to see findings next to the code. Output is checked against the official schema.
+
+```bash
+prbuddy main --sarif > prbuddy.sarif
+```
 
 ### Online package checks
 
@@ -122,6 +149,9 @@ Members that only moved around in the file aren't reported at all. Changes visib
 | PRB301 | warning | New private member nothing in its file uses; new internal type nothing in the repo references (info) |
 | PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
 | PRB303 | info | Most of the PR is in one area, but a few changes land elsewhere |
+| PRB900 | warning | `prbuddy-ignore` without a reason or naming an unknown rule; a new one that matches nothing (info) |
+
+Run `prbuddy --explain <id>` for why a rule exists, what to do when it fires, and its options.
 
 PRB301 and PRB302 look at the whole repository at the PR's head, read straight from git, not just the diff. PRB301 matches by name. It skips anything an outside caller might use: members with attributes, overrides, partial/extern members, extension holders, and Unity/Godot callbacks. PRB302 blanks out local names and literals before comparing, so renaming variables doesn't hide a copy. Test methods are skipped, since tests look like their neighbours by design.
 
@@ -147,7 +177,7 @@ tools/                        refreshes the popular-package list from nuget.org
 ## Adding a rule
 
 1. For a check on new C# code, derive from `AddedCodeRule` and only report nodes where `file.IsNew(node)` is true. For a cross-file check, derive from `RuleBase`.
-2. Register it in `Rules/DefaultRules.cs`.
+2. Register it in `Rules/DefaultRules.cs`, and add its explanation to `Rules/RuleDocs.cs` (a test fails if you forget).
 3. Test it with `Pr.Run(new MyRule(), Pr.File("src/A.cs", before, after))`. For rules that use `context.RepoTrees()`, `Pr.RunInRepo` takes the rest of the repo as a dictionary.
 
 ## Ideas for next steps

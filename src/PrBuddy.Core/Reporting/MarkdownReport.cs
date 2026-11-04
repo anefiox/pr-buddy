@@ -33,6 +33,8 @@ public static class MarkdownReport
         md.AppendLine(FindingCounts(report.AllFindings));
         if (summary.IgnoredFiles > 0)
             md.AppendLine().AppendLine($"> {summary.IgnoredFiles} file(s) ignored by {PrBuddyConfigName}.");
+        if (summary.Suppressed > 0)
+            md.AppendLine().AppendLine($"> {summary.Suppressed} finding(s) suppressed by `prbuddy-ignore` comments (listed at the end).");
         md.AppendLine();
 
         if (report.PullRequestFindings.Count > 0)
@@ -85,6 +87,14 @@ public static class MarkdownReport
         }
         if (shown < review.Count)
             md.AppendLine($"_Details for {review.Count - shown} more file(s) left out to fit GitHub's comment limit. Run `prbuddy` locally for the full report._").AppendLine();
+
+        if (report.Suppressed.Count > 0 && md.Length < MaxLength)
+        {
+            md.AppendLine($"<details><summary>Suppressed by comment ({report.Suppressed.Count})</summary>").AppendLine();
+            foreach (var s in report.Suppressed)
+                md.AppendLine($"- **{s.Finding.RuleId}** {LineLink(s.Finding.Path!, s.Finding.Line ?? s.CommentLine, linkBase)} in `{s.Finding.Path}`: {Escape(s.Reason)}");
+            md.AppendLine().AppendLine("</details>").AppendLine();
+        }
 
         return Footer(md, range, configSource).ToString();
     }
