@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PrBuddy.Cli/PrBuddy.Cli.csproj" />
+    <Project Path="src/PrBuddy.Core/PrBuddy.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PrBuddy.Tests/PrBuddy.Tests.csproj" />
+  </Folder>
+</Solution>

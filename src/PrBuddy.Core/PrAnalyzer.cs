@@ -1,0 +1,111 @@
+using System.Text.Json.Serialization;
+using PrBuddy.Core.Rules;
+using PrBuddy.Core.Semantics;
+
+namespace PrBuddy.Core;
+
+public sealed record FileReport(
+    string Path,
+    string? OldPath,
+    ChangeStatus Status,
+    FileKind Kind,
+    int AddedLines,
+    int DeletedLines,
+    int RiskScore,
+    FileSemanticDiff? SemanticDiff,
+    IReadOnlyList<Finding> Findings)
+{
+    /// <summary>Generated, or nothing but formatting and comments, with no findings: no close read needed.</summary>
+    public bool IsSkimmable =>
+        Findings.Count == 0 && (Kind == FileKind.Generated || SemanticDiff is { IsCosmeticOnly: true });
+}
+
+/// <param name="Files">In suggested reading order: riskiest first, skimmable files last.</param>
+public sealed record AnalysisReport(IReadOnlyList<FileReport> Files, IReadOnlyList<Finding> PullRequestFindings)
+{
+    [JsonIgnore] public IEnumerable<FileReport> ReviewFiles => Files.Where(f => !f.IsSkimmable);
+    [JsonIgnore] public IEnumerable<FileReport> SkimFiles => Files.Where(f => f.IsSkimmable);
+    [JsonIgnore] public IEnumerable<Finding> AllFindings => PullRequestFindings.Concat(Files.SelectMany(f => f.Findings));
+}
+
+public static class PrAnalyzer
+{
+    public static AnalysisReport Analyze(IEnumerable<ChangedFile> files, IEnumerable<IRule>? rules = null)
+    {
+        var analyzed = files.Select(f => new AnalyzedFile(f)).ToList();
+        var context = new PullRequestContext(analyzed);
+
+        var findings = new List<Finding>();
+        foreach (var rule in rules ?? DefaultRules.Create())
+        {
+            try
+            {
+                findings.AddRange(rule.Analyze(context).ToList());
+            }
+            catch (Exception ex)
+            {
+                // One broken rule shouldn't take the whole report down with it.
+                findings.Add(new Finding(rule.Descriptor.Id, Severity.Info, $"Rule failed and was skipped: {ex.Message}"));
+            }
+        }
+
+        var byPath = findings.Where(f => f.Path is not null).ToLookup(f => f.Path!, StringComparer.Ordinal);
+        var reports = analyzed
+            .Select(file =>
+            {
+                var fileFindings = byPath[file.Path].OrderBy(f => f.Line ?? 0).ToList();
+                return new FileReport(file.Path, file.File.OldPath, file.File.Status, file.Kind,
+                    file.File.AddedLines.Count, file.File.DeletedLineCount,
+                    RiskScorer.Score(file, fileFindings), file.SemanticDiff, fileFindings);
+            })
+            .OrderBy(r => r.IsSkimmable)
+            .ThenByDescending(r => r.RiskScore)
+            .ThenBy(r => r.Path, StringComparer.Ordinal)
+            .ToList();
+
+        return new AnalysisReport(reports, findings.Where(f => f.Path is null).ToList());
+    }
+}
+
+/// <summary>A rough "where to look first" number. The weights are a starting point to tune, not science.</summary>
+public static class RiskScorer
+{
+    public static int Score(AnalyzedFile file, IReadOnlyList<Finding> findings)
+    {
+        if (file.Kind == FileKind.Generated) return 0;
+
+        var score = findings.Sum(f => f.Severity switch
+        {
+            Severity.Critical => 8,
+            Severity.Warning => 4,
+            _ => 1,
+        });
+
+        if (file.SemanticDiff is { } diff)
+        {
+            // Test methods are public by convention, so "public API" means nothing there.
+            var apiMatters = file.Kind != FileKind.Test;
+            score += diff.Changes.Sum(c => Weight(c, apiMatters));
+        }
+        else
+        {
+            score += Math.Min(5, (file.File.AddedLines.Count + file.File.DeletedLineCount) / 20);
+            if (file.Kind == FileKind.BuildConfig) score += 2;
+        }
+
+        return score;
+    }
+
+    static int Weight(MemberChange change, bool apiMatters)
+    {
+        var weight = change.Change switch
+        {
+            MemberChangeKind.SignatureChanged => 4,
+            MemberChangeKind.BehaviorChanged => 3,
+            MemberChangeKind.Added or MemberChangeKind.Removed => 2,
+            MemberChangeKind.Renamed => 1,
+            _ => 0,
+        };
+        return weight > 0 && apiMatters && change.IsPublicApi ? weight + 2 : weight;
+    }
+}
