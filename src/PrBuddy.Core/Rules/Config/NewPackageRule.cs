@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using PrBuddy.Core.Packages;
+using PrBuddy.Core.Reporting;
 
 namespace PrBuddy.Core.Rules.Config;
 
@@ -78,10 +79,10 @@ public sealed partial class NewPackageRule(IPackageRegistry? registry = null) : 
 
     public static string Downloads(long count) => count switch
     {
-        >= 1_000_000_000 => $"{count / 1_000_000_000.0:0.#}B",
-        >= 1_000_000 => $"{count / 1_000_000.0:0.#}M",
-        >= 1_000 => $"{count / 1_000.0:0.#}K",
-        _ => count.ToString(),
+        >= 1_000_000_000 => Numbers.OneDecimal(count / 1_000_000_000.0) + "B",
+        >= 1_000_000 => Numbers.OneDecimal(count / 1_000_000.0) + "M",
+        >= 1_000 => Numbers.OneDecimal(count / 1_000.0) + "K",
+        _ => count.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 
     static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

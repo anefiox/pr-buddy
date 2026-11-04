@@ -88,11 +88,17 @@ internal static class MemberExtractor
         var ns = Namespace(node);
 
         var all = node.DescendantTokens().ToList();
-        var signature = node.DescendantTokens(n => !IsBody(n)).ToList();
+        var signature = node.DescendantTokens(n => !IsBody(n)).Where(t => !EndsBody(t)).ToList();
         var body = node.DescendantNodes(n => !IsBody(n)).Where(IsBody).SelectMany(b => b.DescendantTokens()).ToList();
 
+        // `int P => x;` is a get-only property, the same API as `int P { get { return x; } }`.
+        var signatureText = Join(signature);
+        if (node is PropertyDeclarationSyntax { ExpressionBody: not null, AccessorList: null }
+                 or IndexerDeclarationSyntax { ExpressionBody: not null, AccessorList: null })
+            signatureText += " { get }";
+
         return new MemberInfo($"{ns}::{qualified}{parameters}", $"{ns}::{qualified}", qualified + parameters, kind,
-            Join(all), Join(signature), Join(body), Raw(all), IsPublicApi(node), AnalyzedFile.LineOf(node));
+            Join(all), signatureText, Join(body), Raw(all), IsPublicApi(node), AnalyzedFile.LineOf(node));
     }
 
     static (string Name, string Parameters, string Kind)? Describe(MemberDeclarationSyntax node) => node switch
@@ -116,6 +122,14 @@ internal static class MemberExtractor
     static bool IsBody(SyntaxNode node) =>
         node is BlockSyntax or ArrowExpressionClauseSyntax or ConstructorInitializerSyntax
         || node is EqualsValueClauseSyntax { Parent: not ParameterSyntax };
+
+    /// <summary>
+    /// The ';' after `=> expr` or `= initializer` belongs to the member, not the body, but it only
+    /// exists because of the body: `=> x;` and `{ return x; }` have the same signature.
+    /// </summary>
+    static bool EndsBody(SyntaxToken token) =>
+        token.IsKind(SyntaxKind.SemicolonToken) && token.Parent is { } parent &&
+        parent.ChildNodes().Any(c => c is ArrowExpressionClauseSyntax || c is EqualsValueClauseSyntax { Parent: not ParameterSyntax });
 
     static bool IsPublicApi(MemberDeclarationSyntax node) =>
         IsVisibleOutsideAssembly(node) && node.Ancestors().OfType<BaseTypeDeclarationSyntax>().All(IsVisibleOutsideAssembly);

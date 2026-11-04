@@ -48,7 +48,7 @@ public sealed class ScopeCreepRule(double focusShare = ScopeCreepRule.DefaultFoc
 
         var list = string.Join(", ", strays.Select(s => $"{s.Path} ({s.Churn} line{(s.Churn == 1 ? "" : "s")})"));
         yield return Report(path: null, line: null,
-            message: $"{share:P0} of the changed code is in {main.Area}, but it also touches {list}. Are those changes meant to be in this PR?");
+            message: $"{Reporting.Numbers.Percent(share)} of the changed code is in {main.Area}, but it also touches {list}. Are those changes meant to be in this PR?");
     }
 
     public static string AreaOf(string path)

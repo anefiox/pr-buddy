@@ -188,6 +188,27 @@ public class SemanticDifferTests
         Assert.False(change.IsPublicApi); // the class is internal
     }
 
+    [Theory]
+    // Switching between expression and block bodies, or dropping an initializer, changes the body, not the signature.
+    [InlineData("public int Count(int[] items) => items.Length;", "public int Count(int[] items) { try { return items.Length; } catch { } return 0; }")]
+    [InlineData("public int Count(int[] items) { return items.Length; }", "public int Count(int[] items) => items.Length + 1;")]
+    [InlineData("public int Size { get => _size; }", "public int Size { get { return _size * 2; } }")]
+    [InlineData("public int Size => _size;", "public int Size { get { return _size + 1; } }")]
+    [InlineData("public int Retries { get; set; } = 3;", "public int Retries { get; set; }")]
+    public void Body_style_changes_are_behavior_not_signature(string before, string after)
+    {
+        var change = Assert.Single(Diff($"class C {{ int _size; {before} }}", $"class C {{ int _size; {after} }}").Changes);
+        Assert.Equal(MemberChangeKind.BehaviorChanged, change.Change);
+    }
+
+    [Fact]
+    public void Same_body_in_another_style_is_cosmetic_or_behavior_never_signature()
+    {
+        // `=> x` and `{ return x; }` are different tokens, so it isn't cosmetic, but it's not a signature change either.
+        var change = Assert.Single(Diff("class C { public int A() => 1; }", "class C { public int A() { return 1; } }").Changes);
+        Assert.NotEqual(MemberChangeKind.SignatureChanged, change.Change);
+    }
+
     [Fact]
     public void Members_of_an_internal_type_are_not_public_api()
     {

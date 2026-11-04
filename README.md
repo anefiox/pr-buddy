@@ -85,7 +85,7 @@ dotnet tool install -g PrBuddy --add-source ./nupkg
 prbuddy --version
 ```
 
-The package bundles libgit2 for Windows, Linux (glibc and musl, x64 and ARM) and macOS (x64 and Apple Silicon). It's been run on Windows; Linux and macOS haven't been tried yet.
+The package bundles libgit2 for Windows, Linux (glibc and musl, x64 and ARM) and macOS (x64 and Apple Silicon). The full test suite passes on Windows and on Linux (Ubuntu 24.04, x64), and both produce byte-identical reports for the same history. macOS hasn't been tried yet. Numbers in reports use one fixed format, so the machine's language settings don't change the output either.
 
 To set up a config, run this in your repository. It writes a commented `prbuddy.json` at the root, and won't overwrite an existing one without `--force`:
 

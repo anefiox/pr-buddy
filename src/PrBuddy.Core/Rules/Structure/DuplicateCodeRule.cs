@@ -71,7 +71,7 @@ public sealed class DuplicateCodeRule(
             if (!reported.Add(pair)) continue;
 
             yield return Report(file.Path, candidate.Line,
-                $"'{candidate.Name}' is {bestScore:P0} similar to '{best.Name}' ({best.Path}:L{best.Line}). Reuse or extract it instead of keeping two copies?",
+                $"'{candidate.Name}' is {Reporting.Numbers.Percent(bestScore)} similar to '{best.Name}' ({best.Path}:L{best.Line}). Reuse or extract it instead of keeping two copies?",
                 bestScore >= copySimilarity ? Severity.Warning : Severity.Info);
         }
     }

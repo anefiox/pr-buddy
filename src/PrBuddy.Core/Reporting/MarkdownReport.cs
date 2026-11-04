@@ -80,6 +80,7 @@ public static class MarkdownReport
         var shown = 0;
         foreach (var file in review)
         {
+            if (ReportText.HasNoDetails(file)) { shown++; continue; }
             var section = FileSection(file, linkBase);
             if (md.Length + section.Length > MaxLength) break;
             md.Append(section);

@@ -788,12 +788,14 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public void Non_csharp_text_changes_show_line_counts()
+    public void Non_csharp_text_changes_show_line_counts_without_an_empty_details_section()
     {
         _repo.Write("README.md", "# Shop\n").Commit();
         _repo.Branch("feature").Write("README.md", "# Shop\n\nNow with carts.\n").Commit();
 
         var result = Run("main", "feature");
         Assert.Contains("+2 -0 lines", result.Console);
+        Assert.DoesNotContain("── README.md", result.Console); // nothing to say beyond the table row
+        Assert.DoesNotContain("#### `README.md`", Run("main", "feature", "--markdown").Out);
     }
 }

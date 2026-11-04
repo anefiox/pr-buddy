@@ -20,6 +20,14 @@ public static class ReportText
     public static string SuppressedLine(SuppressedFinding s) =>
         $"{s.Finding.RuleId} {s.Finding.Path}{(s.Finding.Line is { } l ? $":L{l}" : "")}: {s.Reason}";
 
+    /// <summary>
+    /// A file whose details section would be empty: no member changes, findings or rename.
+    /// It still appears in the reading-order table, with its line counts.
+    /// </summary>
+    public static bool HasNoDetails(FileReport file) =>
+        file.Findings.Count == 0 && file.OldPath is null &&
+        (file.SemanticDiff is null || file.SemanticDiff.Changes.Count == 0);
+
     /// <summary>Test methods are public by convention, so "public API" is noise there.</summary>
     public static bool ShowsPublicApi(FileReport file) => file.Kind != FileKind.Test;
 

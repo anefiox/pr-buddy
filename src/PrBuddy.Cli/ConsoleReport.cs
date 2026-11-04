@@ -28,7 +28,7 @@ internal sealed class ConsoleReport(IAnsiConsole console)
         WritePullRequestFindings(report.PullRequestFindings);
         WriteReadingOrder(report);
         WriteSkimList(report);
-        foreach (var file in report.ReviewFiles)
+        foreach (var file in report.ReviewFiles.Where(f => !ReportText.HasNoDetails(f)))
             WriteFileDetails(file);
         WriteSuppressed(report.Suppressed);
     }
