@@ -24,6 +24,13 @@ public static class CliApp
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
+    /// <summary>"0.1.0", without the "+commit" suffix the SDK adds to the informational version.</summary>
+    public static string VersionText =>
+        (System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown")
+        .Split('+')[0];
+
     /// <param name="console">Pretty output (tables, colors).</param>
     /// <param name="stdout">Plain output: help, JSON, Markdown.</param>
     /// <param name="stderr">Errors, kept out of stdout so they never end up inside a redirected report.</param>
@@ -36,6 +43,13 @@ public static class CliApp
             if (options.Help)
             {
                 stdout.WriteLine(CliOptions.Usage);
+                return Ok;
+            }
+            if (options.Init)
+                return Init(options, stdout);
+            if (options.Version)
+            {
+                stdout.WriteLine($"prbuddy {VersionText}");
                 return Ok;
             }
             if (options.Explain is { } ruleId)
@@ -63,6 +77,7 @@ public static class CliApp
             using var http = options.Online && registry is null ? new HttpClient { Timeout = TimeSpan.FromSeconds(10) } : null;
             if (http is not null) registry = new NuGetOrgRegistry(http);
             var rules = DefaultRules.Create(config, options.Online ? registry : null);
+            config = ApplyRuleFilter(options, config, rules.Select(r => r.Descriptor.Id).Append(SuppressionCheck.Descriptor.Id).ToList());
             var report = PrAnalyzer.Analyze(files, rules, config, snapshot,
                 history: () => GitDiffReader.ReadHistory(options.RepoPath, range.MergeBaseSha));
 
@@ -83,6 +98,34 @@ public static class CliApp
             stderr.WriteLine($"error: {ex.Message}");
             return BadInput;
         }
+    }
+
+    /// <summary>--only / --skip switch rules off on top of prbuddy.json; severities and options still apply.</summary>
+    static PrBuddyConfig ApplyRuleFilter(CliOptions options, PrBuddyConfig config, IReadOnlyList<string> allIds)
+    {
+        var named = options.Only.Concat(options.Skip).ToList();
+        var unknown = named.Where(id => !allIds.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (unknown.Count > 0)
+            throw new PrBuddyException($"Unknown rule(s): {string.Join(", ", unknown)}. Run prbuddy --list-rules.");
+
+        if (options.Only.Count > 0)
+            return config.WithRulesDisabled(allIds.Where(id => !options.Only.Contains(id, StringComparer.OrdinalIgnoreCase)));
+        return options.Skip.Count > 0 ? config.WithRulesDisabled(options.Skip) : config;
+    }
+
+    /// <summary>Writes a starter prbuddy.json at the repository root. Never overwrites without --force.</summary>
+    static int Init(CliOptions options, TextWriter stdout)
+    {
+        var root = GitDiffReader.WorkingDirectory(options.RepoPath);
+        var path = Path.Combine(root, PrBuddyConfig.FileName);
+        if (File.Exists(path) && !options.Force)
+            throw new PrBuddyException($"{path} already exists. Use --force to replace it.");
+
+        File.WriteAllText(path, ConfigTemplate.Text + Environment.NewLine);
+        stdout.WriteLine($"Created {path}");
+        stdout.WriteLine("Every setting in it is commented out, so it changes nothing until you edit it.");
+        stdout.WriteLine("Commit it to your main branch for it to apply to PRs. To try it now: prbuddy --config prbuddy.json");
+        return Ok;
     }
 
     /// <summary>

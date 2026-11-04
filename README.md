@@ -28,6 +28,8 @@ prbuddy [<base>] [<head>] [options]
       --link-base <url>   Turn files and lines into links, e.g. https://github.com/o/r/blob/<sha>
       --online            Look new NuGet packages up on nuget.org
       --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
+      --only <ids>        Run only these rules, comma-separated (e.g. --only PRB010,PRB001)
+      --skip <ids>        Run everything except these rules
       --list-rules        Show the built-in rules
       --explain <rule>    Why a rule exists, what to do about it, and its options
 ```
@@ -78,13 +80,26 @@ By default PR Buddy never touches the network. With `--online`, PRB202 looks up 
 To install it as a global tool:
 
 ```bash
-dotnet pack src/PrBuddy.Cli -o nupkg
+dotnet pack src/PrBuddy.Cli -c Release -o nupkg
 dotnet tool install -g PrBuddy --add-source ./nupkg
+prbuddy --version
 ```
+
+The package bundles libgit2 for Windows, Linux (glibc and musl, x64 and ARM) and macOS (x64 and Apple Silicon). It's been run on Windows; Linux and macOS haven't been tried yet.
+
+To set up a config, run this in your repository. It writes a commented `prbuddy.json` at the root, and won't overwrite an existing one without `--force`:
+
+```bash
+prbuddy init
+```
+
+### Speed
+
+Most PRs take well under a second. On a synthetic repository with 20,000 C# files (120,000 methods), a 40-file PR takes about 3 seconds, including the whole-repo checks. Files are parsed in parallel, and the output is identical from run to run.
 
 ## Configuration
 
-Put `prbuddy.json` in the repo root. Comments and trailing commas are allowed.
+Put `prbuddy.json` in the repo root (`prbuddy init` writes a starter one). Comments and trailing commas are allowed.
 
 ```jsonc
 {
@@ -108,6 +123,7 @@ Rule options:
 | Rule | Option | Default | |
 |---|---|---|---|
 | PRB006 | `threshold` | `3` | New `!` operators in one file before it's reported |
+| PRB013 | `threshold` | `25` | Cyclomatic complexity at which a new method is reported |
 | PRB302 | `similarity` | `0.8` | Report methods at least this similar |
 | PRB302 | `copySimilarity` | `0.95` | Warning at or above this, info below |
 | PRB302 | `minTokens` | `40` | Ignore shorter method bodies |
@@ -123,9 +139,10 @@ Rule options:
 | `signature` | Attributes, modifiers, return type or parameters changed |
 | `added` / `removed` | Member exists in only one version |
 | `renamed` | Identical body under a new name or in another type |
+| `moved` | Removed from one file and added unchanged to another (formatting aside), shown on both sides with where it went or came from |
 | cosmetic | Only formatting or comments changed (counted, not listed) |
 
-Members that only moved around in the file aren't reported at all. Changes visible outside the assembly are tagged **public API**.
+Members that only moved around in the file aren't reported at all. Members moved to another file show as `moved`, and the new-code checks (unused, duplicated, complex, untested) skip them, so a "split this file up" refactor doesn't read as hundreds of lines of new code. Making a type `partial` to split it counts as cosmetic. On a real 4-method split of a 525-line file, git shows +109/−88 lines; PR Buddy shows 4 moves and no findings. Changes visible outside the assembly are tagged **public API**.
 
 ## Rules
 
@@ -139,6 +156,11 @@ Members that only moved around in the file aren't reported at all. Changes visib
 | PRB006 | info | 3+ new null-forgiving `!` in one file (`null!` / `default!` ignored) |
 | PRB007 | warning | `NotImplementedException`, placeholder strings, TODO comments (info) |
 | PRB008 | info | Comment that just restates the line below it |
+| PRB009 | warning | `throw ex;` in a catch, which resets the stack trace (use `throw;`) |
+| PRB010 | critical | Hard-coded secret in any text file: AWS/GitHub/Slack/Stripe/Google/OpenAI/Anthropic keys, private keys, Azure account keys, JWTs, connection-string passwords (warning in tests; never printed) |
+| PRB011 | warning | `Debugger.Break()` / `Debugger.Launch()` left in |
+| PRB012 | info | `Thread.Sleep` in production code |
+| PRB013 | info | New method with cyclomatic complexity of 25 or more (one finding per file) |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |

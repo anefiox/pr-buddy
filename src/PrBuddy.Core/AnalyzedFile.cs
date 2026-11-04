@@ -43,7 +43,12 @@ public sealed class AnalyzedFile
     /// <summary>Syntax tree of the PR version, or null if not C# or the file was deleted.</summary>
     public SyntaxTree? NewTree => _newTree.Value;
 
-    public FileSemanticDiff? SemanticDiff => _semanticDiff.Value;
+    public FileSemanticDiff? SemanticDiff => _replacedDiff ?? _semanticDiff.Value;
+
+    FileSemanticDiff? _replacedDiff;
+
+    /// <summary>For cross-file analysis (moves) that can only run once every file has been diffed.</summary>
+    internal void ReplaceSemanticDiff(FileSemanticDiff diff) => _replacedDiff = diff;
 
     public bool IsAddedLine(int line) => File.AddedLines.Contains(line);
     public bool IsNew(SyntaxNode node) => IsAddedLine(LineOf(node));
@@ -118,19 +123,27 @@ public sealed class PullRequestContext
 
         var changed = Files.Where(f => f.IsCSharp && f.NewTree is not null).ToDictionary(f => f.Path, f => f);
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
-        _repoTrees = [];
+
+        // Read in order on this thread (the snapshot may sit on a git repository, which isn't
+        // thread-safe), then parse in parallel (Roslyn parsing is). AsOrdered keeps the output
+        // order, and with it every rule's results, the same from run to run.
+        var work = new List<(string Path, AnalyzedFile? Changed, string? Content)>();
         foreach (var path in Snapshot.CSharpPaths)
         {
             if (_isIgnored(path)) continue;
             if (changed.TryGetValue(path, out var file))
             {
-                if (!file.IsGenerated) _repoTrees.Add((path, file.NewTree!));
+                if (!file.IsGenerated) work.Add((path, file, null));
                 continue;
             }
             var content = Snapshot.Read(path);
-            if (content is null || FileClassifier.IsGenerated(path, content)) continue;
-            _repoTrees.Add((path, CSharpSyntaxTree.ParseText(content, parseOptions, path)));
+            if (content is not null && !FileClassifier.IsGenerated(path, content)) work.Add((path, null, content));
         }
+
+        _repoTrees = work
+            .AsParallel().AsOrdered()
+            .Select(w => (w.Path, w.Changed?.NewTree ?? CSharpSyntaxTree.ParseText(w.Content!, parseOptions, w.Path)))
+            .ToList();
         return _repoTrees;
     }
 }

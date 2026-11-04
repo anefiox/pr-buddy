@@ -8,6 +8,7 @@ public sealed class CliOptions
         prbuddy: a deterministic sanity check for pull requests
 
         Usage: prbuddy [<base>] [<head>] [options]
+               prbuddy init [--force]     Write a starter prbuddy.json at the repository root
 
           <base>   Branch or commit the PR targets (default: origin/main, origin/master, main or master)
           <head>   Branch or commit with the changes (default: HEAD)
@@ -25,8 +26,11 @@ public sealed class CliOptions
                                   there; everything else stays offline)
               --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
                                   (overrides failOn in the config)
+              --only <ids>        Run only these rules, comma-separated (e.g. --only PRB010,PRB001)
+              --skip <ids>        Run everything except these rules
               --list-rules        Show the built-in rules
               --explain <rule>    Why a rule exists, what to do about it, and its options
+              --version           Show the version
           -h, --help              Show this help
 
         Exit codes: 0 ok, 1 findings at or above --fail-on, 2 bad input or config.
@@ -44,7 +48,12 @@ public sealed class CliOptions
     public bool Sarif { get; private set; }
     public bool ListRules { get; private set; }
     public string? Explain { get; private set; }
+    public IReadOnlyList<string> Only { get; private set; } = [];
+    public IReadOnlyList<string> Skip { get; private set; } = [];
     public bool Help { get; private set; }
+    public bool Version { get; private set; }
+    public bool Init { get; private set; }
+    public bool Force { get; private set; }
     public Severity? FailOn { get; private set; }
 
     public static CliOptions Parse(string[] args)
@@ -58,6 +67,15 @@ public sealed class CliOptions
             {
                 case "-h" or "--help":
                     options.Help = true;
+                    break;
+                case "--version":
+                    options.Version = true;
+                    break;
+                case "--force":
+                    options.Force = true;
+                    break;
+                case "init" when i == 0:
+                    options.Init = true;
                     break;
                 case "--json":
                     options.Json = true;
@@ -79,6 +97,12 @@ public sealed class CliOptions
                     break;
                 case "--link-base":
                     options.LinkBase = Value(args, ref i);
+                    break;
+                case "--only":
+                    options.Only = [.. options.Only, .. Ids(Value(args, ref i))];
+                    break;
+                case "--skip":
+                    options.Skip = [.. options.Skip, .. Ids(Value(args, ref i))];
                     break;
                 case "--explain":
                     options.Explain = Value(args, ref i);
@@ -105,6 +129,12 @@ public sealed class CliOptions
 
         if (new[] { options.Json, options.Markdown, options.Sarif }.Count(x => x) > 1)
             throw new PrBuddyException("Pick one of --json, --markdown and --sarif.");
+        if (options.Only.Count > 0 && options.Skip.Count > 0)
+            throw new PrBuddyException("Use --only or --skip, not both.");
+        if (options.Init && positional.Count > 0)
+            throw new PrBuddyException("init doesn't take refs. Use: prbuddy init [--force] [--repo <path>]");
+        if (options.Force && !options.Init)
+            throw new PrBuddyException("--force only applies to prbuddy init.");
         if (options.Uncommitted && positional.Count > 1)
             throw new PrBuddyException("--uncommitted checks the working tree, so it takes a base ref but no head ref.");
         if (positional.Count > 2)
@@ -113,6 +143,9 @@ public sealed class CliOptions
         if (positional.Count > 1) options.HeadRef = positional[1];
         return options;
     }
+
+    static IEnumerable<string> Ids(string list) =>
+        list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(id => id.ToUpperInvariant());
 
     static string Value(string[] args, ref int i) =>
         ++i < args.Length ? args[i] : throw new PrBuddyException($"{args[i - 1]} needs a value.");

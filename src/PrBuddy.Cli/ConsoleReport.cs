@@ -176,11 +176,13 @@ internal sealed class ConsoleReport(IAnsiConsole console)
             MemberChangeKind.Added => "[green]added    [/]",
             MemberChangeKind.Removed => "[red]removed  [/]",
             MemberChangeKind.Renamed => "[blue]renamed  [/]",
+            MemberChangeKind.Moved => "[blue]moved    [/]",
             _ => "[grey]cosmetic [/]",
         };
 
         var line = $"{label} {Esc(change.DisplayName)}";
-        if (change.OldDisplayName is { } old && old != change.DisplayName) line += $" [grey]was {Esc(old)}[/]";
+        if (ReportText.MoveText(change) is { } move) line += $" [grey]{Esc(move)}[/]";
+        else if (change.OldDisplayName is { } old && old != change.DisplayName) line += $" [grey]was {Esc(old)}[/]";
         if (showApi && change.IsPublicApi) line += " [red]public API[/]";
         if (change.Line is { } number) line += $" [grey]L{number}[/]";
         return line;

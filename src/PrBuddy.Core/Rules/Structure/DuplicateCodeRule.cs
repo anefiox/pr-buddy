@@ -31,14 +31,24 @@ public sealed class DuplicateCodeRule(
     {
         var candidates = context.CSharpFiles
             .SelectMany(f => AddedMembers.In(f).OfType<BaseMethodDeclarationSyntax>().Select(m => (File: f, Method: m)))
-            .Select(c => (c.File, Fingerprint: Fingerprint.Of(c.File.Path, c.Method, minTokens)))
+            .Select(c => (c.File, Fingerprint: Fingerprint.Of(c.File.Path, c.Method, minTokens, int.MaxValue)))
             .Where(c => c.Fingerprint is not null)
             .ToList();
         if (candidates.Count == 0) yield break;
 
+        // Jaccard can't exceed the smaller set over the larger, so a method far smaller or larger
+        // than every candidate can't match any of them: skip it before doing the expensive part.
+        var slack = similarity * 0.95;
+        var smallest = (int)Math.Floor(candidates.Min(c => c.Fingerprint!.TokenCount) * slack);
+        var largest = (int)Math.Ceiling(candidates.Max(c => c.Fingerprint!.TokenCount) / slack);
+
+        // Parallel, but ordered, so ties between equally similar matches resolve the same every run.
         var index = context.RepoTrees()
-            .SelectMany(t => t.Tree.GetRoot().DescendantNodes().OfType<BaseMethodDeclarationSyntax>().Select(m => Fingerprint.Of(t.Path, m, minTokens)))
-            .OfType<Fingerprint>()
+            .AsParallel().AsOrdered()
+            .SelectMany(t => t.Tree.GetRoot().DescendantNodes().OfType<BaseMethodDeclarationSyntax>()
+                .Select(m => Fingerprint.Of(t.Path, m, Math.Max(minTokens, smallest), largest)))
+            .Where(f => f is not null)
+            .Select(f => f!)
             .ToList();
 
         var reported = new HashSet<string>(StringComparer.Ordinal);
@@ -50,8 +60,7 @@ public sealed class DuplicateCodeRule(
             {
                 if (other.Path == candidate!.Path && other.Line == candidate.Line) continue; // itself
                 var ratio = (double)other.TokenCount / candidate.TokenCount;
-                // Jaccard can't exceed the smaller set over the larger, so sizes this far apart can't match.
-                if (ratio < similarity * 0.95 || ratio > 1 / (similarity * 0.95)) continue;
+                if (ratio < slack || ratio > 1 / slack) continue; // sizes too far apart to match
                 var score = Jaccard(candidate.Shingles, other.Shingles);
                 if (score > bestScore) (best, bestScore) = (other, score);
             }
@@ -67,33 +76,50 @@ public sealed class DuplicateCodeRule(
         }
     }
 
-    static double Jaccard(HashSet<string> a, HashSet<string> b)
+    static double Jaccard(HashSet<ulong> a, HashSet<ulong> b)
     {
         var (small, large) = a.Count <= b.Count ? (a, b) : (b, a);
         var shared = small.Count(large.Contains);
         return (double)shared / (a.Count + b.Count - shared);
     }
 
-    sealed record Fingerprint(string Path, int Line, string Name, int TokenCount, HashSet<string> Shingles)
+    sealed record Fingerprint(string Path, int Line, string Name, int TokenCount, HashSet<ulong> Shingles)
     {
         public string Key => $"{Path}:{Line}";
 
-        public static Fingerprint? Of(string path, BaseMethodDeclarationSyntax method, int minTokens)
+        /// <param name="minTokens">Skip bodies with fewer tokens than this.</param>
+        /// <param name="maxTokens">Skip bodies with more tokens than this (they can't match anything we're looking for).</param>
+        public static Fingerprint? Of(string path, BaseMethodDeclarationSyntax method, int minTokens, int maxTokens)
         {
             // Tests are similar to their neighbours by design (arrange, act, assert with other inputs).
             if (method is MethodDeclarationSyntax m && Testing.TestSyntax.IsTestMethod(m)) return null;
             SyntaxNode? body = (SyntaxNode?)method.Body ?? method.ExpressionBody;
             if (body is null) return null;
 
+            // Counting is cheap; normalizing and shingling is not, so size-check first.
+            var count = body.DescendantTokens().Count();
+            if (count < minTokens || count > maxTokens) return null;
+
             var locals = LocalNames(method);
-            var tokens = body.DescendantTokens().Select(t => Normalize(t, locals)).ToList();
-            if (tokens.Count < minTokens) return null;
+            var tokens = body.DescendantTokens().Select(t => Hash(Normalize(t, locals))).ToArray();
 
-            var shingles = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i + ShingleSize <= tokens.Count; i++)
-                shingles.Add(string.Join(" ", tokens.Skip(i).Take(ShingleSize)));
+            var shingles = new HashSet<ulong>();
+            for (var i = 0; i + ShingleSize <= tokens.Length; i++)
+            {
+                var h = 14695981039346656037UL;
+                for (var k = 0; k < ShingleSize; k++) h = (h ^ tokens[i + k]) * 1099511628211UL;
+                shingles.Add(h);
+            }
 
-            return new Fingerprint(path, AnalyzedFile.LineOf(method), NameOf(method), tokens.Count, shingles);
+            return new Fingerprint(path, AnalyzedFile.LineOf(method), NameOf(method), tokens.Length, shingles);
+        }
+
+        /// <summary>64-bit FNV-1a. Not string.GetHashCode, which is randomized per process and would make results vary between runs.</summary>
+        static ulong Hash(string text)
+        {
+            var h = 14695981039346656037UL;
+            foreach (var c in text) h = (h ^ c) * 1099511628211UL;
+            return h;
         }
 
         static string Normalize(SyntaxToken token, HashSet<string> locals) => token.Kind() switch

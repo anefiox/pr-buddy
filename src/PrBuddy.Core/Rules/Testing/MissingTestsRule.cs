@@ -20,6 +20,14 @@ public sealed class MissingTestsRule : RuleBase
                 message: $"{changed.Count} production file(s) change behavior, but no test files were added or changed.");
     }
 
-    static bool IsBehavioral(MemberChange change) =>
-        change.Change is MemberChangeKind.BehaviorChanged or MemberChangeKind.SignatureChanged or MemberChangeKind.Added;
+    /// <summary>
+    /// A new type's header on its own does nothing (an empty type, or the new part of a partial
+    /// class); the members inside it count. Moves and renames aren't behavior changes either.
+    /// </summary>
+    static bool IsBehavioral(MemberChange change) => change.Change switch
+    {
+        MemberChangeKind.BehaviorChanged or MemberChangeKind.SignatureChanged => true,
+        MemberChangeKind.Added => !SemanticDiffer.TypeKinds.Contains(change.MemberKind),
+        _ => false,
+    };
 }

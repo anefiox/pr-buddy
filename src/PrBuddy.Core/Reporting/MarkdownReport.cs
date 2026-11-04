@@ -127,7 +127,8 @@ public static class MarkdownReport
     static string ChangeText(FileReport file, MemberChange change, string? linkBase)
     {
         var text = $"**{ReportText.ChangeWord(change.Change)}** `{change.DisplayName}`";
-        if (change.OldDisplayName is { } old && old != change.DisplayName) text += $" (was `{old}`)";
+        if (ReportText.MoveText(change) is { } move) text += $" ({Escape(move)})";
+        else if (change.OldDisplayName is { } old && old != change.DisplayName) text += $" (was `{old}`)";
         if (ReportText.ShowsPublicApi(file) && change.IsPublicApi) text += " · public API";
         if (change.Line is { } line) text += " · " + LineLink(file.Path, line, linkBase);
         return text;

@@ -52,6 +52,7 @@ public static class PrAnalyzer
 
         var (ignored, kept) = files.ToList().Partition(f => config.IsIgnored(f.Path));
         var analyzed = kept.Select(f => new AnalyzedFile(f)).ToList();
+        CrossFileMoves.Apply(analyzed); // before the rules, so new-code rules don't see moved code as new
         var context = new PullRequestContext(analyzed, snapshot, config.IsIgnored, history);
 
         var findings = new List<Finding>();
@@ -137,7 +138,7 @@ public static class RiskScorer
             MemberChangeKind.SignatureChanged => 4,
             MemberChangeKind.BehaviorChanged => 3,
             MemberChangeKind.Added or MemberChangeKind.Removed => 2,
-            MemberChangeKind.Renamed => 1,
+            MemberChangeKind.Renamed or MemberChangeKind.Moved => 1,
             _ => 0,
         };
         return weight > 0 && apiMatters && change.IsPublicApi ? weight + 2 : weight;

@@ -18,6 +18,17 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>prbuddy</ToolCommandName>
     <PackageId>PrBuddy</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>anefiox</Authors>
+    <Description>A deterministic sanity check for C# pull requests: shows which members really changed, ignoring reformatting, and flags what smells off. No AI.</Description>
+    <PackageTags>code-review;pull-request;roslyn;static-analysis;dotnet-tool</PackageTags>
+    <RepositoryUrl>https://github.com/anefiox/pr-buddy</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/anefiox/pr-buddy</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>

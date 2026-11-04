@@ -27,6 +27,10 @@ public static class DefaultRules
         new NullForgivingRule(config.GetInt("PRB006", "threshold", NullForgivingRule.DefaultThreshold)),
         new PlaceholderRule(),
         new RedundantCommentRule(),
+        new RethrowResetsStackRule(),
+        new HardcodedSecretRule(),
+        new DebuggingLeftoversRule(),
+        new ThreadSleepRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -46,6 +50,7 @@ public static class DefaultRules
             config.GetShare("PRB302", "copySimilarity", DuplicateCodeRule.DefaultCopySimilarity),
             config.GetInt("PRB302", "minTokens", DuplicateCodeRule.DefaultMinTokens)),
         new ScopeCreepRule(config.GetShare("PRB303", "focusShare", ScopeCreepRule.DefaultFocusShare)),
+        new ComplexNewMethodRule(config.GetInt("PRB013", "threshold", ComplexNewMethodRule.DefaultThreshold)),
         ];
     }
 }

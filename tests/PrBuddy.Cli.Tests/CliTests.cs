@@ -101,6 +101,14 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public void Version_prints_the_package_version()
+    {
+        var result = Cli.Run("--version");
+        Assert.Equal(0, result.Exit);
+        Assert.Equal("prbuddy 0.1.0", result.Out.Trim());
+    }
+
+    [Fact]
     public void List_rules_shows_every_rule()
     {
         var result = Cli.Run("--list-rules");
@@ -148,6 +156,108 @@ public sealed class CliTests : IDisposable
 
         var result = Run("main", "feature", "--fail-on", "info");
         Assert.True(result.Exit == 0, result.Console);
+    }
+
+    // ---------- init ----------
+
+    [Fact]
+    public void Init_writes_a_starter_config_at_the_repo_root_and_never_overwrites()
+    {
+        _repo.Write("src/A.cs", "class A { }").Commit();
+        var path = Path.Combine(_repo.Dir, "prbuddy.json");
+
+        var result = Cli.Run("init", "--repo", Path.Combine(_repo.Dir, "src")); // from a subfolder
+        Assert.Equal(0, result.Exit);
+        Assert.True(File.Exists(path));
+        Assert.Contains("changes nothing until you edit it", result.Out);
+
+        File.WriteAllText(path, "{ \"failOn\": \"info\" }");
+        var again = Cli.Run("init", "--repo", _repo.Dir);
+        Assert.Equal(2, again.Exit);
+        Assert.Contains("already exists. Use --force", again.Err);
+        Assert.Equal("{ \"failOn\": \"info\" }", File.ReadAllText(path)); // untouched
+
+        Assert.Equal(0, Cli.Run("init", "--force", "--repo", _repo.Dir).Exit);
+        Assert.Contains("PR Buddy settings", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void Init_output_works_as_a_config()
+    {
+        Pr(SloppyClass);
+        Cli.Run("init", "--repo", _repo.Dir);
+        var result = Run("main", "feature", "--config", Path.Combine(_repo.Dir, "prbuddy.json"));
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("PRB001", result.Console); // nothing switched off
+    }
+
+    [Theory]
+    [InlineData(new[] { "init", "main" }, "init doesn't take refs")]
+    [InlineData(new[] { "main", "--force" }, "--force only applies to prbuddy init")]
+    public void Init_argument_mistakes_are_explained(string[] args, string expected)
+    {
+        var result = Cli.Run(args);
+        Assert.Equal(2, result.Exit);
+        Assert.Contains(expected, result.Err);
+    }
+
+    // ---------- --only / --skip ----------
+
+    [Fact]
+    public void Only_and_skip_choose_which_rules_run()
+    {
+        Pr(SloppyClass); // PRB001 (empty catch) and PRB101 (no tests)
+
+        var all = Run("main", "feature").Console;
+        Assert.Contains("PRB001", all);
+        Assert.Contains("PRB101", all);
+
+        var only = Run("main", "feature", "--only", "prb001").Console;
+        Assert.Contains("PRB001", only);
+        Assert.DoesNotContain("PRB101", only);
+
+        var skip = Run("main", "feature", "--skip", "PRB001, PRB101").Console;
+        Assert.DoesNotContain("PRB001", skip);
+        Assert.DoesNotContain("PRB101", skip);
+    }
+
+    [Fact]
+    public void Only_keeps_the_config_severities()
+    {
+        _repo.Write("prbuddy.json", """{ "rules": { "PRB001": "critical" } }""");
+        Pr(SloppyClass);
+        Assert.Equal(1, Run("main", "feature", "--only", "PRB001", "--fail-on", "critical").Exit);
+    }
+
+    [Theory]
+    [InlineData(new[] { "--only", "PRB999" }, "Unknown rule(s): PRB999")]
+    [InlineData(new[] { "--only", "PRB001", "--skip", "PRB002" }, "Use --only or --skip, not both")]
+    public void Rule_filter_mistakes_are_explained(string[] args, string expected)
+    {
+        Pr(SloppyClass);
+        var result = Run(["main", "feature", .. args]);
+        Assert.Equal(2, result.Exit);
+        Assert.Contains(expected, result.Err);
+    }
+
+    // ---------- moves end to end ----------
+
+    [Fact]
+    public void A_file_split_reads_as_moves()
+    {
+        var parser = "    private static int Level(string s)\n    {\n"
+            + string.Concat(Enumerable.Range(0, 30).Select(i => $"        if (s == \"l{i}\") return {i};\n")) + "        return -1;\n    }\n";
+        _repo.Write("src/Tool.cs", "public static class Tool\n{\n    public static int Run(string s) => Level(s);\n" + parser + "}\n").Commit("initial");
+        _repo.Branch("feature")
+            .Write("src/Tool.cs", "public static partial class Tool\n{\n    public static int Run(string s) => Level(s);\n}\n")
+            .Write("src/Tool.Parsing.cs", "public static partial class Tool\n{\n" + parser + "}\n")
+            .Commit("split");
+
+        var result = Run("main", "feature");
+        Assert.Contains("moved     Tool.Level(string) from src/Tool.cs", result.Console);
+        Assert.Contains("to src/Tool.Parsing.cs", result.Console);
+        Assert.DoesNotContain("PRB013", result.Console);
+        Assert.DoesNotContain("PRB101", result.Console);
     }
 
     // ---------- refs ----------

@@ -50,9 +50,19 @@ public static class ReportText
         MemberChangeKind.SignatureChanged => "signature",
         MemberChangeKind.Added => "added",
         MemberChangeKind.Removed => "removed",
-        MemberChangeKind.Renamed => "renamed/moved",
+        MemberChangeKind.Renamed => "renamed",
+        MemberChangeKind.Moved => "moved between files",
         _ => "cosmetic",
     };
+
+    /// <summary>"from src/Old.cs (Old.Run)" / "to src/New.cs", or null when it isn't a move.</summary>
+    public static string? MoveText(MemberChange change)
+    {
+        if (change is not { Change: MemberChangeKind.Moved, MovedPath: { } other }) return null;
+        var direction = change.Line is null ? "to" : "from";
+        var name = change.OldDisplayName is { } n && n != change.DisplayName ? $" ({n})" : "";
+        return $"{direction} {other}{name}";
+    }
 
     public static string SkimReason(FileReport file) => file switch
     {

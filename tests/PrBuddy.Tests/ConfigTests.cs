@@ -99,6 +99,34 @@ public class ConfigTests
     }
 
     [Fact]
+    public void The_init_template_is_valid_and_changes_nothing()
+    {
+        var config = PrBuddyConfig.Parse(ConfigTemplate.Text, "template");
+        Assert.Empty(config.Ignore);
+        Assert.Empty(config.Rules);
+        Assert.Null(config.FailOn);
+        config.Validate(PrBuddy.Core.Rules.DefaultRules.Create().Select(r => r.Descriptor.Id));
+    }
+
+    [Fact]
+    public void Every_example_in_the_init_template_is_valid_once_uncommented()
+    {
+        // Uncomment the example lines (but not prose comments) and the result must still parse and validate.
+        var lines = ConfigTemplate.Text.Split('\n').Select(l =>
+        {
+            var trimmed = l.TrimStart();
+            return trimmed.StartsWith("// \"") ? l.Replace("// \"", "\"") : l;
+        });
+        var config = PrBuddyConfig.Parse(string.Join('\n', lines), "uncommented");
+
+        Assert.Equal(Severity.Warning, config.FailOn);
+        Assert.Equal(3, config.Ignore.Count);
+        Assert.False(config.For("PRB008").Enabled);
+        Assert.Equal(0.85, config.GetShare("PRB302", "similarity", 0.8));
+        config.Validate(PrBuddy.Core.Rules.DefaultRules.Create().Select(r => r.Descriptor.Id));
+    }
+
+    [Fact]
     public void Share_options_are_validated()
     {
         var good = PrBuddyConfig.Parse("""{ "rules": { "PRB302": { "similarity": 0.9 } } }""", "test");

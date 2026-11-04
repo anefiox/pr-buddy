@@ -42,6 +42,22 @@ public static class RuleDocs
         ["PRB008"] = Doc(
             "A comment that repeats the code (`// increment counter` above `counter++`) adds reading time and nothing else, and goes stale when the code changes. It's a common sign of generated code.",
             "Delete it, or replace it with the *why*: the reason behind the code, which the code itself can't tell you."),
+        ["PRB009"] = Doc(
+            "`throw ex;` inside `catch (Exception ex)` rethrows the same exception, but its stack trace now starts at this line. Whoever debugs it later loses where the error really happened.",
+            "Use `throw;` to rethrow with the original stack trace. To add context, wrap it: `throw new MyException(\"what failed\", ex);`."),
+        ["PRB010"] = Doc(
+            "A credential in source code is readable by everyone with repo access, copied into every clone and fork, and stays in git history even after it's deleted. Only formats with a distinctive shape are matched (AWS, GitHub, Slack, Stripe, Google, OpenAI/Anthropic keys, private keys, Azure account keys, JWTs, connection-string passwords), and placeholders and published example keys are skipped. In test files it's a warning rather than critical. The report never prints the secret itself.",
+            "Move it to configuration: environment variables, user secrets (`dotnet user-secrets`) or a secret store such as Azure Key Vault. If the value was ever real, rotate it now; removing it from the code doesn't remove it from git history."),
+        ["PRB011"] = Doc(
+            "`Debugger.Break()` stops the process when a debugger is attached and can crash it when one isn't; `Debugger.Launch()` pops up a \"choose a debugger\" dialog. Both are debugging aids that got committed.",
+            "Remove it. Breakpoints belong in the IDE, not the code."),
+        ["PRB012"] = Doc(
+            "`Thread.Sleep` holds a whole thread doing nothing, and in async code it blocks the thread the await was meant to free. A fixed sleep is also usually a guess standing in for waiting on the real event, which makes code slow when the guess is too long and flaky when it's too short. Test files are skipped.",
+            "In async code use `await Task.Delay(...)`. Better still, wait for the thing itself: a task, an event, a `SemaphoreSlim`, a `CancellationToken`, or a retry with backoff."),
+        ["PRB013"] = Doc(
+            "Cyclomatic complexity counts independent paths through a method (one per if, case, loop, catch, ?:, ??, && and ||). High numbers mean a method that's hard to read, review and test fully. Generated code often produces one big method where a person would write several.",
+            "Split it into smaller methods with clear names, use early returns, or replace long if/switch chains with a lookup table or polymorphism.",
+            new RuleOption("threshold", "25", "Complexity at which a new method is reported")),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),

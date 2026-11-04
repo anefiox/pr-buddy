@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 
 namespace PrBuddy.Core.Semantics;
@@ -12,19 +13,25 @@ public enum MemberChangeKind
     Removed,
     /// <summary>Identical body under a new name or in another type.</summary>
     Renamed,
+    /// <summary>Removed from one file and added, unchanged, to another (see <see cref="MemberChange.MovedPath"/>).</summary>
+    Moved,
     /// <summary>Only whitespace, comments or line endings changed.</summary>
     CosmeticOnly,
 }
 
 /// <param name="Line">Line in the new version, or null for removed members.</param>
-/// <param name="OldDisplayName">The previous name, for renames and signature changes.</param>
+/// <param name="OldDisplayName">The previous name, for renames, signature changes and moves.</param>
+/// <param name="MovedPath">For a move: the file it came from (in the new file) or went to (in the old one).</param>
+/// <param name="Tokens">Added and removed members only: the exact tokens, used to match moves across files.</param>
 public sealed record MemberChange(
     string DisplayName,
     string MemberKind,
     MemberChangeKind Change,
     bool IsPublicApi,
     int? Line,
-    string? OldDisplayName = null);
+    string? OldDisplayName = null,
+    string? MovedPath = null,
+    [property: JsonIgnore] string? Tokens = null);
 
 public sealed record FileSemanticDiff(string Path, IReadOnlyList<MemberChange> Changes, bool HasParseErrors)
 {
@@ -75,8 +82,8 @@ public static class SemanticDiffer
             if (twin is not null) Pair(old, twin, MemberChangeKind.Renamed);
         }
 
-        changes.AddRange(unmatchedNew.Select(n => new MemberChange(n.DisplayName, n.Kind, MemberChangeKind.Added, n.IsPublicApi, n.Line)));
-        changes.AddRange(unmatchedOld.Select(o => new MemberChange(o.DisplayName, o.Kind, MemberChangeKind.Removed, o.IsPublicApi, null)));
+        changes.AddRange(unmatchedNew.Select(n => new MemberChange(n.DisplayName, n.Kind, MemberChangeKind.Added, n.IsPublicApi, n.Line, Tokens: n.Tokens)));
+        changes.AddRange(unmatchedOld.Select(o => new MemberChange(o.DisplayName, o.Kind, MemberChangeKind.Removed, o.IsPublicApi, null, Tokens: o.Tokens)));
 
         var ordered = changes.OrderBy(c => c.Line ?? int.MaxValue).ToList();
         return new FileSemanticDiff(path, ordered, HasErrors(oldTree) || HasErrors(newTree));
@@ -90,9 +97,15 @@ public static class SemanticDiffer
         }
     }
 
+    /// <summary>Kinds produced for type declarations (their header: name, modifiers, base list).</summary>
+    public static readonly IReadOnlySet<string> TypeKinds = new HashSet<string>(StringComparer.Ordinal) { "class", "struct", "interface", "enum", "record" };
+
     static void ComparePair(MemberInfo old, MemberInfo current, List<MemberChange> changes)
     {
-        if (old.Tokens == current.Tokens)
+        // Making a type partial (to split it across files) changes nothing at run time.
+        var onlyMadePartial = TypeKinds.Contains(current.Kind) && old.Tokens != current.Tokens
+                              && WithoutPartial(old.Tokens) == WithoutPartial(current.Tokens);
+        if (old.Tokens == current.Tokens || onlyMadePartial)
         {
             if (old.RawText != current.RawText)
                 changes.Add(new MemberChange(current.DisplayName, current.Kind, MemberChangeKind.CosmeticOnly, current.IsPublicApi, current.Line));
@@ -104,6 +117,9 @@ public static class SemanticDiffer
             : MemberChangeKind.SignatureChanged;
         changes.Add(new MemberChange(current.DisplayName, current.Kind, kind, old.IsPublicApi || current.IsPublicApi, current.Line));
     }
+
+    static string WithoutPartial(string tokens) =>
+        string.Join(" ", tokens.Split(' ').Where(t => t != "partial"));
 
     static bool HasErrors(SyntaxTree? tree) =>
         tree?.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error) ?? false;

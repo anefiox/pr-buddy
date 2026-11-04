@@ -86,6 +86,15 @@ public sealed class PrBuddyConfig
             : throw new PrBuddyException($"{Source}: {ruleId}.{option} must be a number above 0 and at most 1, like 0.9.");
     }
 
+    /// <summary>A copy with these rules switched off (for --only / --skip); everything else stays as configured.</summary>
+    public PrBuddyConfig WithRulesDisabled(IEnumerable<string> ruleIds)
+    {
+        var rules = new Dictionary<string, RuleSettings>(Rules, StringComparer.OrdinalIgnoreCase);
+        foreach (var id in ruleIds)
+            rules[id] = new RuleSettings { Enabled = false, Severity = For(id).Severity, Options = For(id).Options };
+        return new PrBuddyConfig(Source, Ignore, rules, FailOn);
+    }
+
     /// <summary>Catches typos like "PRB01" before they silently do nothing.</summary>
     public void Validate(IEnumerable<string> knownRuleIds)
     {

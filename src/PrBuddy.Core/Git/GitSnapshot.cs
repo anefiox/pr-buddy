@@ -9,29 +9,33 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
     const long MaxFileBytes = 1_000_000;
 
     readonly Repository _repo;
-    readonly Tree _tree;
+    // Remembered from the one walk of the tree, so reading a file never looks its path up again.
+    readonly Dictionary<string, Blob> _blobs = new(StringComparer.Ordinal);
 
     internal GitSnapshot(Repository repo, Commit commit)
     {
         _repo = repo;
-        _tree = commit.Tree;
         var paths = new List<string>();
-        Collect(_tree, "", paths);
+        Collect(commit.Tree, "", paths);
         CSharpPaths = paths;
     }
 
     public IReadOnlyList<string> CSharpPaths { get; }
 
     public string? Read(string path) =>
-        _tree[path]?.Target is Blob { Size: <= MaxFileBytes, IsBinary: false } blob ? blob.GetContentText() : null;
+        _blobs.TryGetValue(path, out var blob) && blob is { Size: <= MaxFileBytes, IsBinary: false } ? blob.GetContentText() : null;
 
-    static void Collect(Tree tree, string prefix, List<string> paths)
+    void Collect(Tree tree, string prefix, List<string> paths)
     {
         foreach (var entry in tree)
         {
             var path = prefix + entry.Name;
             if (entry.TargetType == TreeEntryTargetType.Tree) Collect((Tree)entry.Target, path + "/", paths);
-            else if (entry.TargetType == TreeEntryTargetType.Blob && FileClassifier.IsCSharp(path)) paths.Add(path);
+            else if (entry.TargetType == TreeEntryTargetType.Blob && FileClassifier.IsCSharp(path))
+            {
+                paths.Add(path);
+                _blobs[path] = (Blob)entry.Target;
+            }
         }
     }
 

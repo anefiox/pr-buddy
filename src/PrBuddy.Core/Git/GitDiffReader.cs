@@ -9,6 +9,13 @@ public static class GitDiffReader
 {
     static readonly string[] DefaultBaseCandidates = ["origin/main", "origin/master", "main", "master"];
 
+    /// <summary>The root folder of the working tree containing <paramref name="repoPath"/>.</summary>
+    public static string WorkingDirectory(string repoPath)
+    {
+        using var repo = Open(repoPath);
+        return repo.Info.WorkingDirectory ?? throw new PrBuddyException("This is a bare repository; there's no working tree.");
+    }
+
     /// <summary>The repo's C# files at a commit. Dispose it when done; it keeps the repository open.</summary>
     public static GitSnapshot OpenSnapshot(string repoPath, string commitSha)
     {
