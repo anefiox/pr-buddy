@@ -49,6 +49,7 @@ public static class DefaultRules
         new AutoPropertyCandidateRule(),
         new TupleItemAccessRule(),
         new HardcodedCredentialValueRule(),
+        new UndiscoverableMigrationRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -59,6 +60,7 @@ public static class DefaultRules
         new TimingAssertionRule(),
         new BareBooleanAssertsRule(),
         new ExternalHostInTestRule(),
+        new UnawaitedAsyncAssertionRule(),
 
         // Config and dependencies (PRB2xx)
         new BuildConfigChangedRule(),

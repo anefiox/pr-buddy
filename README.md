@@ -225,6 +225,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB029 | info | New property that only wraps a private field and could be an auto-property |
 | PRB030 | info | Tuple read by position (`.Item1`, `.Item2`) instead of deconstruction or named elements |
 | PRB031 | warning | Credential-named value (`ClientSecret`, `ApiKey`, `AccessToken`) set to a random-looking literal; `ClientId`-style ids are info |
+| PRB032 | warning | New EF Core migration with no `.Designer.cs` and no `[Migration]` attribute, so EF never applies it |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
@@ -233,6 +234,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB106 | warning | Test asserts on measured time (Stopwatch elapsed, DateTime difference) |
 | PRB107 | info | Test with two or more Assert.True/False calls and no messages |
 | PRB108 | info | Test code names a real external host (not example.com, `.test`, localhost or a private address) |
+| PRB109 | warning | Async assertion (`Assert.ThrowsAsync`, `.Should().ThrowAsync()`) not awaited; info in NUnit files |
 | PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
 | PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |

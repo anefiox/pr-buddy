@@ -112,6 +112,9 @@ public static class RuleDocs
         ["PRB031"] = Doc(
             "A field, constant, property or variable named like a credential (ClientSecret, ApiKey, AccessToken) is set to a random-looking string. PRB010 only knows formats with a distinctive shape; this catches the rest. A name like ClientId or AppId is info: public clients may embed one, but its origin and owner should be clear. The value is never printed.",
             "Load secrets from configuration or a secret store and rotate any that were real. For an embedded id, say where it was registered and who owns it, or make it configurable."),
+        ["PRB032"] = Doc(
+            "A new EF Core migration has no .Designer.cs and no [Migration] attribute. EF finds migrations through [DbContext] and [Migration], which dotnet ef writes into the designer file, so this one is never applied and nothing fails.",
+            "Regenerate the migration with dotnet ef migrations add, or add the designer file with [DbContext(typeof(...))] and [Migration(\"<id>\")]."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -136,6 +139,9 @@ public static class RuleDocs
         ["PRB108"] = Doc(
             "Test code names a real external host in a URL. A test that calls it depends on the network and on someone else's server; one that only uses it as data can still resolve it by accident. Reserved names (example.com, *.test, *.invalid, localhost), private addresses and well-known schema URIs are allowed.",
             "Use example.com, a .test name or localhost for data. For a real dependency such as a script, ship it with the tests or serve it locally."),
+        ["PRB109"] = Doc(
+            "An async assertion such as Assert.ThrowsAsync or x.Should().ThrowAsync() returns a task that nothing awaits. The test can finish, and pass, before the assertion fails. In NUnit files it's info, because NUnit's Assert.ThrowsAsync blocks before version 5.",
+            "Await the assertion and make the test async Task."),
         ["PRB201"] = Doc(
             "CI workflows, `.editorconfig`, `Directory.Build.*` and `prbuddy.json` change how every other change is built and checked, so they deserve their own look.",
             "Make sure the change is intended and doesn't weaken checks (see PRB203)."),

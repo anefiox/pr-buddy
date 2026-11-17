@@ -20,6 +20,8 @@ public sealed class ReflectionIntoPrivatesRule : AddedCodeRule
 
     protected override IEnumerable<Finding> AnalyzeFile(AnalyzedFile file, SyntaxNode root)
     {
+        // One finding per file: the fix (make it internal, or go through the public API) is the same each time.
+        var lookups = new List<(InvocationExpressionSyntax Call, string Member)>();
         foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
             if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.ValueText: var name } ||
@@ -28,17 +30,23 @@ public sealed class ReflectionIntoPrivatesRule : AddedCodeRule
                     .OfType<IdentifierNameSyntax>().Any(id => id.Identifier.ValueText == "NonPublic")))
                 continue;
 
-            var member = call.ArgumentList.Arguments.FirstOrDefault()?.Expression switch
+            lookups.Add((call, call.ArgumentList.Arguments.FirstOrDefault()?.Expression switch
             {
                 LiteralExpressionSyntax literal => $"'{literal.Token.ValueText}'",
                 InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } n =>
                     $"'{n.ArgumentList.Arguments.FirstOrDefault()?.ToString()}'",
                 _ => "a non-public member",
-            };
-            yield return Report(file, call,
-                $"This test looks up {member} through reflection with BindingFlags.NonPublic. A rename still compiles " +
-                "and only breaks when the test runs. Make the member internal and use InternalsVisibleTo, " +
-                "or test it through the public API.");
+            }));
         }
+        if (lookups.Count == 0) yield break;
+
+        var members = lookups.Select(l => l.Member).Distinct().ToArray();
+        var what = lookups.Count == 1
+            ? $"This test looks up {members[0]}"
+            : $"Tests here look up non-public members {lookups.Count} times ({string.Join(", ", members.Take(4))}{(members.Length > 4 ? ", ..." : "")})";
+        yield return Report(file, lookups[0].Call,
+            $"{what} through reflection with BindingFlags.NonPublic. A rename still compiles " +
+            "and only breaks when the test runs. Make the member internal and use InternalsVisibleTo, " +
+            "or test it through the public API.");
     }
 }
