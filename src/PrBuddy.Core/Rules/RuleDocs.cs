@@ -70,6 +70,15 @@ public static class RuleDocs
         ["PRB017"] = Doc(
             "An event handler can run during a notification that stops or disposes the instance. An explicit synchronous callback can also invalidate the instance before the caller resumes. This rule looks for a call that throws on a state set by Dispose, including through a source base class where available.",
             "Recheck the lifecycle state immediately before calling the accessor, or use an accessor that handles a stopped instance."),
+        ["PRB018"] = Doc(
+            "A method returns early once a member is set, then sets that member inside a try before later work that can still fail. When the later work throws, the catch leaves the member set, so the early return blocks every retry and the error sticks.",
+            "Assign the member only after all the work has succeeded, or reset it in the catch."),
+        ["PRB019"] = Doc(
+            "A new collection field of objects is added to but never removed from, or only emptied by Clear() in some other method. It holds a strong reference to everything it has seen, which can stop items being garbage collected and quietly grows memory.",
+            "Remove items when they stop being relevant, bound the collection, or hold them weakly. If Clear() really runs often enough, ignore the info finding."),
+        ["PRB020"] = Doc(
+            "A new member of a [Flags] enum has a plain number, or an implicit value, that isn't a single bit. It overlaps other flags, so setting it also sets them and HasFlag checks give the wrong answer. Values written with member names, zero, -1 and an all-flags mask are allowed.",
+            "Give it the next free power of two, or write the combination with member names (A | B) if that's what it means."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -82,6 +91,9 @@ public static class RuleDocs
         ["PRB104"] = Doc(
             "A test with no assertions, or only ones like `Assert.True(true)`, passes unless something throws. It looks like coverage but checks nothing.",
             "Assert on the result or the observable effect. `Assert.Throws` and mock verifications count as assertions."),
+        ["PRB105"] = Doc(
+            "A test looks up a non-public member by name with BindingFlags.NonPublic. Renaming or changing that member still compiles and only fails when the test runs, and the test is tied to implementation details.",
+            "Make the member internal and expose it with InternalsVisibleTo, or test the behavior through the public API."),
         ["PRB201"] = Doc(
             "CI workflows, `.editorconfig`, `Directory.Build.*` and `prbuddy.json` change how every other change is built and checked, so they deserve their own look.",
             "Make sure the change is intended and doesn't weaken checks (see PRB203)."),

@@ -211,10 +211,14 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB015 | warning | Discarded cancellation registration from Register or UnsafeRegister |
 | PRB016 | warning | Sibling callbacks complete the same task, but one skips a resource that another disposes |
 | PRB017 | warning | A callback path calls a lifecycle-sensitive accessor without checking state that disposal can invalidate |
+| PRB018 | warning | A guard returns early once a member is set, but the member is set in a try before later work that can fail, so a failure is never retried |
+| PRB019 | warning | New collection field of objects that's added to but never removed from; only cleared in another method (info) |
+| PRB020 | warning | New `[Flags]` enum member whose value isn't a single bit, written as a number or left implicit |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
 | PRB104 | warning | Test with no assertions, or only `Assert.True(true)`-style ones |
+| PRB105 | info | Test looks up a non-public member through reflection (`BindingFlags.NonPublic`) |
 | PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
 | PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |

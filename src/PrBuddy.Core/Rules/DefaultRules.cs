@@ -35,12 +35,16 @@ public static class DefaultRules
         new DiscardedCancellationRegistrationRule(),
         new CallbackCleanupRule(),
         new CallbackLifetimeRule(),
+        new PrematureLoadGuardRule(),
+        new GrowOnlyCollectionFieldRule(),
+        new FlagsEnumValueRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
         new WeakenedTestsRule(),
         new SkippedTestRule(),
         new TestWithoutAssertionsRule(),
+        new ReflectionIntoPrivatesRule(),
 
         // Config and dependencies (PRB2xx)
         new BuildConfigChangedRule(),
