@@ -28,7 +28,9 @@ public sealed class EncodeBeforeLengthCheckRule : AddedCodeRule
                             ArgumentList.Arguments: [var source],
                         } } variable],
                     } declaration ||
-                    !access.Expression.ToString().Contains("Encoding", StringComparison.Ordinal) || !file.IsNew(declaration) ||
+                    !access.Expression.ToString().Contains("Encoding", StringComparison.Ordinal) ||
+                    // A renamed file's moved lines aren't "added", but the move is a natural time to fix this.
+                    !file.IsNew(declaration) && file.File.Status != ChangeStatus.Renamed ||
                     statements[i + 1] is not IfStatementSyntax check || !RefusesWhenLong(check.Condition, variable.Identifier.ValueText))
                     continue;
 

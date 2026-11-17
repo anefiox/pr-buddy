@@ -1,3 +1,4 @@
+// prbuddy-ignore-file PRB033: this code analyses pull requests, so "the PR" is its subject, not history
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using PrBuddy.Core.Semantics;
 

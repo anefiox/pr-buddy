@@ -4,7 +4,10 @@ using System.Text.Json;
 namespace PrBuddy.Core.Packages;
 
 /// <param name="Exists">False when the registry has no listed package with this id.</param>
-public sealed record PackageInfo(string Id, bool Exists, long TotalDownloads = 0, bool Verified = false);
+/// <param name="Deprecation">The owner's deprecation reasons and message for the latest version, or null if it isn't deprecated.</param>
+/// <param name="Vulnerabilities">Known vulnerabilities in the latest version.</param>
+public sealed record PackageInfo(string Id, bool Exists, long TotalDownloads = 0, bool Verified = false,
+    string? Deprecation = null, int Vulnerabilities = 0);
 
 /// <summary>Where PRB202 looks packages up. Only used with --online.</summary>
 public interface IPackageRegistry
@@ -47,13 +50,29 @@ public sealed class NuGetOrgRegistry(HttpClient http) : IPackageRegistry
                 package.GetProperty("id").GetString() ?? id,
                 Exists: true,
                 package.TryGetProperty("totalDownloads", out var downloads) ? downloads.GetInt64() : 0,
-                package.TryGetProperty("verified", out var verified) && verified.GetBoolean());
+                package.TryGetProperty("verified", out var verified) && verified.GetBoolean(),
+                DeprecationOf(package),
+                package.TryGetProperty("vulnerabilities", out var vulns) && vulns.ValueKind == JsonValueKind.Array ? vulns.GetArrayLength() : 0);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
             _unreachable = true; // one failure is enough; don't wait on a timeout for every package
             return null;
         }
+    }
+
+    static string? DeprecationOf(JsonElement package)
+    {
+        if (!package.TryGetProperty("deprecation", out var deprecation) || deprecation.ValueKind != JsonValueKind.Object) return null;
+        var reasons = deprecation.TryGetProperty("reasons", out var r) && r.ValueKind == JsonValueKind.Array
+            ? string.Join(", ", r.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)))
+            : "";
+        var message = deprecation.TryGetProperty("message", out var m) ? m.GetString() : null;
+        var alternate = deprecation.TryGetProperty("alternatePackage", out var a) && a.ValueKind == JsonValueKind.Object &&
+                        a.TryGetProperty("id", out var altId) ? altId.GetString() : null;
+        var parts = new[] { reasons.Length > 0 ? reasons : "deprecated", message, alternate is null ? null : $"use {alternate} instead" }
+            .Where(p => !string.IsNullOrWhiteSpace(p));
+        return string.Join("; ", parts);
     }
 
     string FindSearchService()

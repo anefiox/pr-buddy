@@ -226,6 +226,12 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB030 | info | Tuple read by position (`.Item1`, `.Item2`) instead of deconstruction or named elements |
 | PRB031 | warning | Credential-named value (`ClientSecret`, `ApiKey`, `AccessToken`) set to a random-looking literal; `ClientId`-style ids are info |
 | PRB032 | warning | New EF Core migration with no `.Designer.cs` and no `[Migration]` attribute, so EF never applies it |
+| PRB033 | info | New comment narrates the change ("the former…", "used to…", "now uses…", "this PR") instead of the code |
+| PRB034 | warning | Call to an API banned in `prbuddy.json` (`"PRB034": { "apis": { "Utf8Parser.TryParse": "reason" } }`) |
+| PRB035 | info | New `#nullable enable` in one file; says whether the project already has nullable on or off |
+| PRB036 | info | Added C# lines with trailing whitespace, or blank lines that aren't empty |
+| PRB037 | info | The same call used as a condition twice in one method |
+| PRB038 | info | `CancellationToken.Register` lambda that captures a variable instead of using the state overload |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
@@ -236,7 +242,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB108 | info | Test code names a real external host (not example.com, `.test`, localhost or a private address) |
 | PRB109 | warning | Async assertion (`Assert.ThrowsAsync`, `.Should().ThrowAsync()`) not awaited; info in NUnit files |
 | PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
-| PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
+| PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out. With `--online`, deprecated or vulnerable packages and new tools in `dotnet-tools.json` are reported too |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |
 | PRB204 | warning | Workflow action or container image referenced by tag rather than a commit SHA or digest (info if the file pins nothing) |
 | PRB205 | warning | Committed local database, build output, per-user IDE file or log |
@@ -244,6 +250,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
 | PRB303 | info | Most of the PR is in one area, but a few changes land elsewhere |
 | PRB304 | info | Public member removed, renamed or given different parameters |
+| PRB305 | info | New member in a Razor component's `@code` block that nothing uses |
 | PRB900 | warning | `prbuddy-ignore` without a reason or naming an unknown rule; a new one that matches nothing (info) |
 
 Run `prbuddy --explain <id>` for why a rule exists, what to do when it fires, and its options.

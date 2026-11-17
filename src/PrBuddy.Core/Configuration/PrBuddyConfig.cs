@@ -86,6 +86,32 @@ public sealed class PrBuddyConfig
             : throw new PrBuddyException($"{Source}: {ruleId}.{option} must be a number above 0 and at most 1, like 0.9.");
     }
 
+    /// <summary>An object of strings, such as PRB034's "apis": { "Utf8Parser.TryParse": "Use SessionParseState.TryGetInt" }.</summary>
+    public IReadOnlyDictionary<string, string> GetStringMap(string ruleId, string option)
+    {
+        if (!For(ruleId).Options.TryGetValue(option, out var value)) return new Dictionary<string, string>();
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new PrBuddyException($"{Source}: {ruleId}.{option} must be an object of \"name\": \"reason\" pairs.");
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+            map[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                ? property.Value.GetString() ?? ""
+                : throw new PrBuddyException($"{Source}: {ruleId}.{option}.{property.Name} must be a string giving the reason.");
+        return map;
+    }
+
+    /// <summary>A true/false option, such as PRB034's "includeTests".</summary>
+    public bool GetBool(string ruleId, string option, bool fallback)
+    {
+        if (!For(ruleId).Options.TryGetValue(option, out var value)) return fallback;
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new PrBuddyException($"{Source}: {ruleId}.{option} must be true or false."),
+        };
+    }
+
     /// <summary>A copy with these rules switched off (for --only / --skip); everything else stays as configured.</summary>
     public PrBuddyConfig WithRulesDisabled(IEnumerable<string> ruleIds)
     {

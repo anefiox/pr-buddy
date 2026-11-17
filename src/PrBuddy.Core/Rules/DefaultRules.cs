@@ -50,6 +50,12 @@ public static class DefaultRules
         new TupleItemAccessRule(),
         new HardcodedCredentialValueRule(),
         new UndiscoverableMigrationRule(),
+        new HistoryCommentRule(),
+        new BannedApiRule(config.GetStringMap("PRB034", "apis"), config.GetBool("PRB034", "includeTests", false)),
+        new FileNullableEnableRule(),
+        new StrayWhitespaceRule(),
+        new RepeatedConditionCallRule(),
+        new CapturingRegistrationRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -76,6 +82,7 @@ public static class DefaultRules
             config.GetShare("PRB302", "copySimilarity", DuplicateCodeRule.DefaultCopySimilarity),
             config.GetInt("PRB302", "minTokens", DuplicateCodeRule.DefaultMinTokens)),
         new PublicApiBreakRule(),
+        new UnusedRazorMemberRule(),
         new ScopeCreepRule(config.GetShare("PRB303", "focusShare", ScopeCreepRule.DefaultFocusShare)),
         new ComplexNewMethodRule(config.GetInt("PRB013", "threshold", ComplexNewMethodRule.DefaultThreshold)),
         ];

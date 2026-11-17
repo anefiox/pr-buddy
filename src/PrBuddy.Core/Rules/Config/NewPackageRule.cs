@@ -19,7 +19,53 @@ public sealed partial class NewPackageRule(IPackageRegistry? registry = null) : 
 
     public override RuleDescriptor Descriptor { get; } = new("PRB202", "New package dependency", Severity.Warning, "Dependencies");
 
-    public override IEnumerable<Finding> Analyze(PullRequestContext context)
+    public override IEnumerable<Finding> Analyze(PullRequestContext context) =>
+        ProjectPackages(context).Concat(ManifestTools(context));
+
+    /// <summary>
+    /// .NET tools added to a dotnet-tools.json manifest. Only an online lookup has something to say
+    /// about these (a tool is a deliberate choice, not a typo-prone dependency), so offline it's quiet.
+    /// </summary>
+    IEnumerable<Finding> ManifestTools(PullRequestContext context)
+    {
+        if (registry is null) yield break;
+        foreach (var file in context.Files.Where(f => f.Path.EndsWith("dotnet-tools.json", StringComparison.OrdinalIgnoreCase) && f.File.NewContent is not null))
+        {
+            var before = Tools(file.File.OldContent);
+            foreach (var tool in Tools(file.File.NewContent).Where(t => !before.Contains(t)))
+            {
+                var line = file.AddedLineTexts().FirstOrDefault(l => l.Text.Contains($"\"{tool}\"", StringComparison.OrdinalIgnoreCase)).Line;
+                if (registry.Lookup(tool) is not { Exists: true } info) continue;
+                if (Warning(info) is { } warning)
+                    yield return Report(file.Path, line > 0 ? line : null, $"New .NET tool '{info.Id}' {warning}");
+            }
+        }
+    }
+
+    static HashSet<string> Tools(string? manifest)
+    {
+        var tools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(manifest)) return tools;
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(manifest, new System.Text.Json.JsonDocumentOptions
+                { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            if (json.RootElement.TryGetProperty("tools", out var list) && list.ValueKind == System.Text.Json.JsonValueKind.Object)
+                foreach (var tool in list.EnumerateObject()) tools.Add(tool.Name);
+        }
+        catch (System.Text.Json.JsonException) { } // prbuddy-ignore PRB001: a broken manifest has nothing for this rule to read
+        return tools;
+    }
+
+    /// <summary>What's wrong with a package the registry knows: deprecated, or vulnerable. Null if nothing.</summary>
+    static string? Warning(PackageInfo info) => (info.Deprecation, info.Vulnerabilities) switch
+    {
+        ({ } deprecation, _) => $"is deprecated by its owner ({deprecation}). Pick a maintained replacement.",
+        (null, > 0) => $"has {info.Vulnerabilities} known vulnerabilit{(info.Vulnerabilities == 1 ? "y" : "ies")} in its latest version on nuget.org. Check the advisories before adding it.",
+        _ => null,
+    };
+
+    IEnumerable<Finding> ProjectPackages(PullRequestContext context)
     {
         foreach (var file in context.Files.Where(f => FileClassifier.IsProjectFile(f.Path) && f.File.NewContent is not null))
         {
@@ -41,6 +87,12 @@ public sealed partial class NewPackageRule(IPackageRegistry? registry = null) : 
                 var info = registry?.Lookup(name);
                 var lookalike = PackageLookalikes.LookalikeOf(name);
                 var typo = lookalike is null ? "" : $" It's one keystroke away from the popular '{lookalike}': is it a typo?";
+
+                if (info is { Exists: true } && Warning(info) is { } warning)
+                {
+                    yield return Report(file.Path, LineOf(name), $"New package '{info.Id}' {warning}");
+                    continue;
+                }
 
                 // A package that's popular in its own right isn't a typo, whatever its name.
                 if (info is { Exists: true, TotalDownloads: >= FewDownloads })

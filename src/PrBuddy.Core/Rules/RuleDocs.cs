@@ -115,6 +115,24 @@ public static class RuleDocs
         ["PRB032"] = Doc(
             "A new EF Core migration has no .Designer.cs and no [Migration] attribute. EF finds migrations through [DbContext] and [Migration], which dotnet ef writes into the designer file, so this one is never applied and nothing fails.",
             "Regenerate the migration with dotnet ef migrations add, or add the designer file with [DbContext(typeof(...))] and [Migration(\"<id>\")]."),
+        ["PRB033"] = Doc(
+            "A new comment tells the story of the change (\"the former algorithm\", \"used to take\", \"now uses\", \"this PR\") instead of explaining the code as it is. After merge nobody can see the old version, so the comment explains something that isn't there.",
+            "Put the history in the commit message or PR description, and keep comments for invariants and reasons."),
+        ["PRB034"] = Doc(
+            "The code calls an API this repository has banned in prbuddy.json. Matching is by name: \"Utf8Parser.TryParse\" matches that call however it's qualified, and \".Chunk\" matches any member called Chunk. Tests are skipped unless includeTests is true. The rule does nothing until you list APIs.",
+            "Use what the reason says instead. To ban something: \"PRB034\": { \"apis\": { \"Utf8Parser.TryParse\": \"Use SessionParseState.TryGetInt\", \".Chunk\": \"No LINQ in hot paths\" } }."),
+        ["PRB035"] = Doc(
+            "A new #nullable enable turns nullable warnings on for one file. In a project with nullable off, that pulls annotation changes into code the PR isn't about; in a project with it on, the line does nothing. The project setting comes from the nearest .csproj or Directory.Build.props.",
+            "Remove it, or turn nullable on for the whole project in a PR of its own."),
+        ["PRB036"] = Doc(
+            "Added C# lines end in spaces or tabs, or are blank lines with whitespace on them. Editors strip these later, which turns them into noise in someone else's diff.",
+            "Trim them, or set trim_trailing_whitespace = true in .editorconfig so the editor does it."),
+        ["PRB037"] = Doc(
+            "The same call with the same arguments is used as a condition twice in one method, for example in a bool local and again in an if. It repeats the work, and if the call reads changing state the two checks can disagree. Calls whose arguments are reassigned in between aren't reported.",
+            "Store the result in a local and use it in both places."),
+        ["PRB038"] = Doc(
+            "CancellationToken.Register or UnsafeRegister is given a lambda that captures one variable. Each call allocates a closure and a delegate; the overload that takes a state object, with a static lambda, avoids both.",
+            "Use Register(static state => ((T)state!).Cancel(), value). It matters most on hot paths."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -173,6 +191,9 @@ public static class RuleDocs
         ["PRB304"] = Doc(
             "A public member of a public type was removed, renamed or given different parameters. Code outside this repository that uses it stops compiling, or fails at run time against a new binary. Changes to attributes, modifiers or the return type alone aren't reported.",
             "If anyone builds against this, keep the old signature as an overload (perhaps [Obsolete]) or call out the break in the release notes."),
+        ["PRB305"] = Doc(
+            "A member added in a Razor component's @code block isn't used by the component's markup or code, the PR's other files or the repo's C#. PR Buddy only parses .cs files, so the unused-code check (PRB301) can't see component code. Members with attributes ([Parameter], [Inject]...), overrides and lifecycle methods are skipped.",
+            "Remove it, or use it if it was meant to be."),
         ["PRB900"] = Doc(
             "A prbuddy-ignore comment without a reason, or naming a rule that doesn't exist, isn't applied, so the finding stays. A suppression this PR adds that matches nothing is reported too (as info): usually a wrong id or a leftover.",
             "Give the reason after a colon (`prbuddy-ignore PRB001: why this is fine`), fix the rule id, or remove the comment."),
