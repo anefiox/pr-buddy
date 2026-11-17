@@ -106,6 +106,12 @@ public static class RuleDocs
         ["PRB029"] = Doc(
             "A new property only returns, and maybe assigns, a private field that nothing else needs directly. That's two declarations for what an auto-property says in one. Fields passed by ref, locked on or marked volatile are left alone.",
             "Replace the pair with an auto-property, using a private setter if the field is assigned elsewhere."),
+        ["PRB030"] = Doc(
+            "New code reads a tuple through Item1, Item2 and so on. The reader has to look up what each position holds, and swapping two values of the same type compiles fine.",
+            "Deconstruct the tuple into named variables, or give its elements names in the method's return type."),
+        ["PRB031"] = Doc(
+            "A field, constant, property or variable named like a credential (ClientSecret, ApiKey, AccessToken) is set to a random-looking string. PRB010 only knows formats with a distinctive shape; this catches the rest. A name like ClientId or AppId is info: public clients may embed one, but its origin and owner should be clear. The value is never printed.",
+            "Load secrets from configuration or a secret store and rotate any that were real. For an embedded id, say where it was registered and who owns it, or make it configurable."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -142,6 +148,9 @@ public static class RuleDocs
         ["PRB204"] = Doc(
             "A GitHub workflow uses an action, or pulls a container image, by tag or branch. Tags can be moved and images re-pushed, so the code that runs in CI, with its secrets, can change without a commit in this repo. It's a warning when the same file already pins other actions to a commit SHA.",
             "Pin actions to a full commit SHA with the version in a comment, and images with @sha256:<digest>. Put a new publisher through your dependency review."),
+        ["PRB205"] = Doc(
+            "The PR adds a file that looks like a local database (.sqlite, .db, .mdf), a build output (.pdb, .nupkg, anything under bin/ or obj/), per-user IDE state (.suo, .user) or a log. These are machine-specific, can hold real data, and change on every run. Files in test folders, testdata, fixtures or samples are left alone.",
+            "Remove the file and add its pattern to .gitignore, or explain in the PR why it belongs in the repo."),
         ["PRB301"] = Doc(
             "New code nothing calls is dead on arrival: something to read, maintain and test that does nothing. Generated code often adds helpers it never uses. Matching is by name, and members an outside caller might use (attributes, overrides, callbacks, extension holders) are skipped.",
             "Delete it, or use it. If it's called by something PR Buddy can't see (reflection, a framework convention), suppress it with that reason."),

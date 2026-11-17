@@ -47,6 +47,8 @@ public static class DefaultRules
         new DoubleErrorHandlingRule(),
         new LooseMediaTypeMatchRule(),
         new AutoPropertyCandidateRule(),
+        new TupleItemAccessRule(),
+        new HardcodedCredentialValueRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -63,6 +65,7 @@ public static class DefaultRules
         new NewPackageRule(registry),
         new WeakenedChecksRule(),
         new UnpinnedWorkflowDependencyRule(),
+        new CommittedArtifactRule(),
 
         // Structure, using the whole repo (PRB3xx)
         new UnusedNewCodeRule(),

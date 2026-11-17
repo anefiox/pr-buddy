@@ -1,3 +1,4 @@
+// prbuddy-ignore-file PRB108: the real hosts here are the rule's own test data and are never contacted
 using PrBuddy.Core;
 using PrBuddy.Core.Rules.Code;
 using PrBuddy.Core.Rules.Structure;

@@ -223,6 +223,8 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB027 | warning | Inner catch calls the same error handler as the catch-all around it, so an error can be handled twice |
 | PRB028 | info | Media type matched with `Contains`, or an exact check OR'ed with a `Contains` of the same value |
 | PRB029 | info | New property that only wraps a private field and could be an auto-property |
+| PRB030 | info | Tuple read by position (`.Item1`, `.Item2`) instead of deconstruction or named elements |
+| PRB031 | warning | Credential-named value (`ClientSecret`, `ApiKey`, `AccessToken`) set to a random-looking literal; `ClientId`-style ids are info |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
@@ -235,6 +237,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |
 | PRB204 | warning | Workflow action or container image referenced by tag rather than a commit SHA or digest (info if the file pins nothing) |
+| PRB205 | warning | Committed local database, build output, per-user IDE file or log |
 | PRB301 | warning | New private member nothing in its file uses; new internal type nothing in the repo references (info) |
 | PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
 | PRB303 | info | Most of the PR is in one area, but a few changes land elsewhere |
