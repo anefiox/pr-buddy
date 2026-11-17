@@ -20,7 +20,7 @@
     <PackageId>PrBuddy</PackageId>
     <Version>0.1.0</Version>
     <Authors>anefiox</Authors>
-    <Description>A deterministic sanity check for C# pull requests: shows which members really changed, ignoring reformatting, and flags what smells off. No AI.</Description>
+    <Description>A deterministic sanity check for C# pull requests with an optional agent review and benchmarking mode.</Description>
     <PackageTags>code-review;pull-request;roslyn;static-analysis;dotnet-tool</PackageTags>
     <RepositoryUrl>https://github.com/anefiox/pr-buddy</RepositoryUrl>
     <PackageProjectUrl>https://github.com/anefiox/pr-buddy</PackageProjectUrl>
@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <EmbeddedResource Include="Agents\pr-review\SKILL.md" LogicalName="PrBuddy.AgentSkill.md" />
+    <EmbeddedResource Include="Agents\pr-review\decision.json" LogicalName="PrBuddy.AgentDecision.json" />
   </ItemGroup>
 
 </Project>

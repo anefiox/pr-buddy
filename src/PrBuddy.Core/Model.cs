@@ -22,6 +22,8 @@ public sealed class ChangedFile
 
     /// <summary>1-based line numbers in <see cref="NewContent"/> that the PR added or modified.</summary>
     public IReadOnlySet<int> AddedLines { get; init; } = new HashSet<int>();
+    /// <summary>1-based line numbers removed from the base version.</summary>
+    public IReadOnlySet<int> DeletedLines { get; init; } = new HashSet<int>();
 
     public int DeletedLineCount { get; init; }
 

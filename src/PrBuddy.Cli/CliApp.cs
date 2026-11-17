@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PrBuddy.Cli.Agents;
 using PrBuddy.Core;
 using PrBuddy.Core.Configuration;
 using PrBuddy.Core.Git;
@@ -66,11 +67,21 @@ public static class CliApp
                 return Ok;
             }
 
-            var (range, files) = options.Uncommitted
+            var (range, files) = options.Staged
+                ? GitDiffReader.ReadStaged(options.RepoPath)
+                : options.Uncommitted
                 ? GitDiffReader.ReadUncommitted(options.RepoPath, options.BaseRef)
                 : GitDiffReader.Read(options.RepoPath, options.BaseRef, options.HeadRef);
             var (config, configSource) = LoadConfig(options, range);
-            using IDisposable snapshotLifetime = options.Uncommitted
+            if (options.Agent is not null)
+            {
+                var review = AgentReview.RunAsync(options, range, files, config).GetAwaiter().GetResult();
+                stdout.WriteLine(JsonSerializer.Serialize(review, AgentReview.ReportJson));
+                return Ok;
+            }
+            using IDisposable snapshotLifetime = options.Staged
+                ? GitDiffReader.OpenIndexSnapshot(options.RepoPath)
+                : options.Uncommitted
                 ? GitDiffReader.OpenWorkingTreeSnapshot(options.RepoPath)
                 : GitDiffReader.OpenSnapshot(options.RepoPath, range.HeadSha);
             var snapshot = (IRepoSnapshot)snapshotLifetime;

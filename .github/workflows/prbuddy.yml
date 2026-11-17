@@ -1,0 +1,18 @@
+# PR Buddy reviewing its own pull requests. Other repos use `uses: anefiox/pr-buddy@master` instead of `./`.
+name: PR Buddy
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prbuddy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needs history to find the merge base
+      - uses: ./

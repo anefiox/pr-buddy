@@ -46,6 +46,55 @@ public sealed class GitDiffReaderTests : IDisposable
         Assert.Contains("does-not-exist", ex.Message);
     }
 
+    [Fact]
+    public void Staged_reads_renames_and_binary_files_without_changing_the_index()
+    {
+        Repository.Init(_dir);
+        Commit("src/Old.cs", "class A { public int M() => 1; }\n", "initial");
+        using var repo = new Repository(_dir);
+        File.Move(Path.Combine(_dir, "src/Old.cs"), Path.Combine(_dir, "src/New.cs"));
+        File.WriteAllBytes(Path.Combine(_dir, "image.png"), [0x89, 0x50, 0x00, 0xFF]);
+        Commands.Stage(repo, "*");
+        var indexPath = Path.Combine(_dir, ".git/index");
+        var originalIndex = File.ReadAllBytes(indexPath);
+
+        var (range, files) = GitDiffReader.ReadStaged(_dir);
+        Assert.Equal("HEAD", range.BaseRef);
+        Assert.Equal("staged", range.HeadRef);
+        var renamed = Assert.Single(files, f => f.Status == ChangeStatus.Renamed);
+        Assert.Equal("src/Old.cs", renamed.OldPath);
+        Assert.Equal("src/New.cs", renamed.Path);
+        Assert.Equal(renamed.OldContent, renamed.NewContent);
+        var binary = Assert.Single(files, f => f.IsBinary);
+        Assert.Equal("image.png", binary.Path);
+        Assert.Null(binary.NewContent);
+
+        using var snapshot = GitDiffReader.OpenIndexSnapshot(_dir);
+        Assert.Equal(["src/New.cs"], snapshot.CSharpPaths);
+        Assert.Null(snapshot.Read("src/Old.cs"));
+        Assert.Equal(renamed.NewContent, snapshot.Read("src/New.cs"));
+        Assert.Equal(originalIndex, File.ReadAllBytes(indexPath));
+    }
+
+    [Fact]
+    public void Staged_rejects_unresolved_conflicts_with_a_friendly_error()
+    {
+        Repository.Init(_dir);
+        Commit("A.cs", "class A { int M() => 1; }\n", "initial");
+        using var repo = new Repository(_dir);
+        var baseBranch = repo.Head.FriendlyName;
+        Commands.Checkout(repo, repo.CreateBranch("feature"));
+        Commit("A.cs", "class A { int M() => 2; }\n", "feature");
+        Commands.Checkout(repo, repo.Branches[baseBranch]);
+        Commit("A.cs", "class A { int M() => 3; }\n", "base");
+        repo.Merge(repo.Branches["feature"], _author);
+        Assert.True(repo.Index.Conflicts.Any());
+
+        var error = Assert.Throws<PrBuddyException>(() => GitDiffReader.ReadStaged(_dir));
+        Assert.Contains("unresolved merge conflicts", error.Message);
+        Assert.Throws<PrBuddyException>(() => GitDiffReader.OpenIndexSnapshot(_dir));
+    }
+
     void Commit(string path, string content, string message)
     {
         using var repo = new Repository(_dir);

@@ -2,7 +2,7 @@ using LibGit2Sharp;
 
 namespace PrBuddy.Core.Git;
 
-/// <summary>The repo's C# files as they are in one commit, read straight from git objects (the working tree is never touched).</summary>
+/// <summary>The repo's C# files in a commit or index, read straight from git objects (the working tree is never touched).</summary>
 public sealed class GitSnapshot : IRepoSnapshot, IDisposable
 {
     /// <summary>Bigger files are almost always generated or vendored, and not worth parsing.</summary>
@@ -18,6 +18,15 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
         var paths = new List<string>();
         Collect(commit.Tree, "", paths);
         CSharpPaths = paths;
+    }
+
+    internal GitSnapshot(Repository repo)
+    {
+        _repo = repo;
+        foreach (var entry in repo.Index.Where(e => FileClassifier.IsCSharp(e.Path)).OrderBy(e => e.Path, StringComparer.Ordinal))
+            if (repo.Lookup<Blob>(entry.Id) is { } blob)
+                _blobs[entry.Path] = blob;
+        CSharpPaths = _blobs.Keys.ToList();
     }
 
     public IReadOnlyList<string> CSharpPaths { get; }

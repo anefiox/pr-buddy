@@ -58,6 +58,18 @@ public static class RuleDocs
             "Cyclomatic complexity counts independent paths through a method (one per if, case, loop, catch, ?:, ??, && and ||). High numbers mean a method that's hard to read, review and test fully. Generated code often produces one big method where a person would write several.",
             "Split it into smaller methods with clear names, use early returns, or replace long if/switch chains with a lookup table or polymorphism.",
             new RuleOption("threshold", "25", "Complexity at which a new method is reported")),
+        ["PRB014"] = Doc(
+            "A loop can still consume CLR stack if it calls a helper that calls back into the loop's method. On deep input a repeating cycle can overflow the stack. PR Buddy binds both synchronous calls to methods in the same type and file and reports cycles absent from the base version.",
+            "Put pending work on the loop's worklist, or return the next step for the loop to process. Add a regression test for a deep input that follows the re-entry path."),
+        ["PRB015"] = Doc(
+            "Discarding the result of CancellationToken.Register or UnsafeRegister loses the handle used to unregister the callback. The callback can retain state or run after the operation has finished.",
+            "Keep the registration for the intended callback lifetime, then dispose or unregister it."),
+        ["PRB016"] = Doc(
+            "Sibling callbacks can complete the same task through different paths. When one disposes a captured resource or passes it to a helper that disposes it, a sibling that completes the task without using the resource can skip cleanup.",
+            "Release the owned resource on each terminal path, or centralize cleanup where callback ownership and completion are coordinated."),
+        ["PRB017"] = Doc(
+            "An event handler can run during a notification that stops or disposes the instance. An explicit synchronous callback can also invalidate the instance before the caller resumes. This rule looks for a call that throws on a state set by Dispose, including through a source base class where available.",
+            "Recheck the lifecycle state immediately before calling the accessor, or use an accessor that handles a stopped instance."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),

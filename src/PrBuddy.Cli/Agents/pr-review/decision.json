@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "read", "findings"],
+  "properties": {
+    "action": { "type": "string", "enum": ["read", "complete"] },
+    "read": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "side", "start", "end"],
+          "properties": {
+            "path": { "type": "string" },
+            "side": { "type": "string", "enum": ["base", "head"] },
+            "start": { "type": "integer" },
+            "end": { "type": "integer" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anchor", "severity", "message", "evidence", "fix"],
+        "properties": {
+          "anchor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "side", "line", "category"],
+            "properties": {
+              "path": { "type": "string" },
+              "side": { "type": "string", "enum": ["base", "head"] },
+              "line": { "type": "integer" },
+              "category": { "type": "string", "enum": ["security", "correctness", "reliability", "performance"] }
+            }
+          },
+          "severity": { "type": "string", "enum": ["warning", "critical"] },
+          "message": { "type": "string" },
+          "evidence": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    }
+  }
+}

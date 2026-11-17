@@ -16,6 +16,7 @@ public sealed class CliOptions
         Options:
           -u, --uncommitted       Check the working tree (staged, unstaged and new files) instead
                                   of a commit, so you can review before committing
+              --staged            Check only staged changes against HEAD (no refs)
           -r, --repo <path>       Repository to analyze (default: current directory)
           -c, --config <path>     Config file (default: prbuddy.json as it is on the base branch)
               --json              Print the report as JSON
@@ -23,7 +24,11 @@ public sealed class CliOptions
               --sarif             Print the report as SARIF 2.1.0, for IDEs and code scanning
               --link-base <url>   Turn files and lines into links, e.g. https://github.com/o/r/blob/<sha>
               --online            Look new NuGet packages up on nuget.org (sends their names
-                                  there; everything else stays offline)
+                                  there)
+              --agent <provider>  Run a read-only AI review as JSON (codex, claude, openrouter, local)
+                                  Sends changed code to the selected provider
+              --model <name>      Model to use with --agent
+              --benchmark <file> Score the review against expected findings in a JSON file
               --fail-on <level>   Exit with code 1 if any finding is at least info, warning or critical
                                   (overrides failOn in the config)
               --only <ids>        Run only these rules, comma-separated (e.g. --only PRB010,PRB001)
@@ -42,7 +47,11 @@ public sealed class CliOptions
     public string? ConfigPath { get; private set; }
     public string? LinkBase { get; private set; }
     public bool Uncommitted { get; private set; }
+    public bool Staged { get; private set; }
     public bool Online { get; private set; }
+    public string? Agent { get; private set; }
+    public string? Model { get; private set; }
+    public string? BenchmarkPath { get; private set; }
     public bool Json { get; private set; }
     public bool Markdown { get; private set; }
     public bool Sarif { get; private set; }
@@ -83,8 +92,20 @@ public sealed class CliOptions
                 case "--online":
                     options.Online = true;
                     break;
+                case "--agent":
+                    options.Agent = Value(args, ref i);
+                    break;
+                case "--model":
+                    options.Model = Value(args, ref i);
+                    break;
+                case "--benchmark":
+                    options.BenchmarkPath = Value(args, ref i);
+                    break;
                 case "-u" or "--uncommitted":
                     options.Uncommitted = true;
+                    break;
+                case "--staged":
+                    options.Staged = true;
                     break;
                 case "--markdown":
                     options.Markdown = true;
@@ -135,12 +156,29 @@ public sealed class CliOptions
             throw new PrBuddyException("init doesn't take refs. Use: prbuddy init [--force] [--repo <path>]");
         if (options.Force && !options.Init)
             throw new PrBuddyException("--force only applies to prbuddy init.");
+        if (options.Staged && options.Uncommitted)
+            throw new PrBuddyException("Use --staged or --uncommitted, not both.");
+        if (options.Staged && (positional.Count > 0 || options.Init))
+            throw new PrBuddyException("--staged checks the index against HEAD and takes no refs. Use: prbuddy --staged");
         if (options.Uncommitted && positional.Count > 1)
             throw new PrBuddyException("--uncommitted checks the working tree, so it takes a base ref but no head ref.");
         if (positional.Count > 2)
             throw new PrBuddyException("Expected at most two refs: <base> and <head>.");
         if (positional.Count > 0) options.BaseRef = positional[0];
         if (positional.Count > 1) options.HeadRef = positional[1];
+        if (options.Agent is null && (options.Model is not null || options.BenchmarkPath is not null))
+            throw new PrBuddyException("--model and --benchmark require --agent.");
+        if (options.Agent is not null)
+        {
+            if (options.Agent is not ("codex" or "claude" or "openrouter" or "local"))
+                throw new PrBuddyException("--agent expects codex, claude, openrouter or local.");
+            if (string.IsNullOrWhiteSpace(options.Model) || options.Model.StartsWith('-'))
+                throw new PrBuddyException("--agent requires an explicit --model.");
+            if (options.Uncommitted || options.Init || options.Explain is not null || options.ListRules ||
+                options.Markdown || options.Sarif || options.Online || options.LinkBase is not null ||
+                options.Only.Count > 0 || options.Skip.Count > 0 || options.FailOn is not null)
+                throw new PrBuddyException("--agent reviews commits or --staged, emits JSON, and uses its bundled review rules.");
+        }
         return options;
     }
 

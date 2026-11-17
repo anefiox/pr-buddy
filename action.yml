@@ -1,0 +1,40 @@
+name: PR Buddy
+description: Deterministic sanity check for C# pull requests. Shows what really changed and what smells off. No AI.
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  fail-on:
+    description: Fail the job if any finding is at least this severity (info, warning or critical). Empty means use failOn from prbuddy.json, or never fail.
+    required: false
+    default: ""
+  comment:
+    description: Post the report as a PR comment, updating the same comment on every push.
+    required: false
+    default: "true"
+  config:
+    description: Path to a config file. Empty means prbuddy.json as it is on the base branch.
+    required: false
+    default: ""
+  github-token:
+    description: Token used to post the comment. Needs pull-requests write permission.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Run PR Buddy
+      shell: bash
+      env:
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        LINK_BASE: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"

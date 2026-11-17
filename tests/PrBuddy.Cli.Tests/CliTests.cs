@@ -542,6 +542,121 @@ public sealed class CliTests : IDisposable
         Assert.Contains("<summary>Suppressed by comment (1)</summary>", md);
     }
 
+    // ---------- --staged ----------
+
+    [Theory]
+    [InlineData(new[] { "--staged", "--uncommitted" }, "Use --staged or --uncommitted")]
+    [InlineData(new[] { "--staged", "main" }, "takes no refs")]
+    [InlineData(new[] { "init", "--staged" }, "takes no refs")]
+    public void Staged_rejects_incompatible_arguments(string[] args, string expected)
+    {
+        var result = Cli.Run(args);
+        Assert.Equal(2, result.Exit);
+        Assert.Contains(expected, result.Err);
+        Assert.Empty(result.Out);
+    }
+
+    [Fact]
+    public void Staged_reviews_the_index_even_when_the_working_file_is_fixed()
+    {
+        _repo.Write("src/Cart.cs", CleanClass).Commit("initial");
+        _repo.Write("src/Cart.cs", SloppyClass).Stage("src/Cart.cs");
+        _repo.Write("src/Cart.cs", CleanClass);
+
+        var result = Run("--staged", "--only", "PRB001", "--fail-on", "warning");
+        Assert.Equal(1, result.Exit);
+        Assert.Contains("HEAD...staged", result.Console);
+        Assert.Contains("PRB001", result.Console);
+        // The check neither rewrites the working file nor stages its newer content.
+        Assert.Equal(CleanClass, File.ReadAllText(Path.Combine(_repo.Dir, "src/Cart.cs")));
+        Assert.Equal(1, Run("--staged", "--only", "PRB001", "--fail-on", "warning").Exit);
+    }
+
+    [Fact]
+    public void Staged_excludes_unstaged_untracked_and_already_committed_changes()
+    {
+        _repo.Write("src/Cart.cs", CleanClass).Commit("initial");
+        _repo.Branch("feature").Write("src/Committed.cs", SloppyClass).Commit();
+        _repo.Write("src/Cart.cs", SloppyClass);
+        _repo.Write("src/Untracked.cs", SloppyClass);
+
+        var result = Run("--staged");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("No changes to review", result.Console);
+    }
+
+    [Fact]
+    public void Staged_reports_deletions_even_if_the_working_file_was_recreated()
+    {
+        _repo.Write("src/Cart.cs", CleanClass).Commit("initial");
+        _repo.Delete("src/Cart.cs").Stage("src/Cart.cs").Write("src/Cart.cs", SloppyClass);
+
+        var result = Run("--staged");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("deleted: 2 removed", result.Console);
+        Assert.DoesNotContain("PRB001", result.Console);
+    }
+
+    [Fact]
+    public void Staged_repo_wide_rules_use_staged_callers_instead_of_disk()
+    {
+        _repo.Write("src/Keep.cs", "class Keep { }").Commit("initial");
+        _repo.Write("src/Helper.cs", "internal static class Helper { public static int One() => 1; }").Stage("src/Helper.cs");
+        _repo.Write("src/Caller.cs", "public class Caller { public int M() => Helper.One(); }").Stage("src/Caller.cs");
+        _repo.Delete("src/Caller.cs");
+
+        var result = Run("--staged", "--only", "PRB301");
+        Assert.Equal(0, result.Exit);
+        Assert.DoesNotContain("PRB301", result.Console);
+    }
+
+    [Fact]
+    public void Staged_repo_wide_rules_ignore_unstaged_callers()
+    {
+        _repo.Write("src/Keep.cs", "class Keep { }").Commit("initial");
+        _repo.Write("src/Helper.cs", "internal static class Helper { public static int One() => 1; }").Stage("src/Helper.cs");
+        _repo.Write("src/Caller.cs", "public class Caller { public int M() => Helper.One(); }");
+
+        var result = Run("--staged", "--only", "PRB301");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("New internal class 'Helper' isn't referenced", result.Console);
+    }
+
+    [Theory]
+    [InlineData("--json", "\"headRef\": \"staged\"")]
+    [InlineData("--markdown", "PRB001")]
+    [InlineData("--sarif", "\"ruleId\": \"PRB001\"")]
+    public void Staged_supports_all_machine_readable_formats(string format, string expected)
+    {
+        _repo.Write("src/Cart.cs", CleanClass).Commit("initial");
+        _repo.Write("src/Cart.cs", SloppyClass).Stage("src/Cart.cs");
+
+        var result = Run("--staged", format, "--only", "PRB001");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains(expected, result.Out);
+        Assert.Empty(result.Err);
+    }
+
+    [Fact]
+    public void Staged_config_cannot_turn_off_its_own_check()
+    {
+        _repo.Write("src/Cart.cs", CleanClass).Commit("initial");
+        _repo.Write("src/Cart.cs", SloppyClass).Stage("src/Cart.cs");
+        _repo.Write("prbuddy.json", "{\"rules\":{\"PRB001\":\"off\"}}").Stage("prbuddy.json");
+
+        var result = Run("--staged", "--only", "PRB001");
+        Assert.Equal(0, result.Exit);
+        Assert.Contains("PRB001", result.Console);
+    }
+
+    [Fact]
+    public void Staged_needs_at_least_one_commit()
+    {
+        var result = Run("--staged");
+        Assert.Equal(2, result.Exit);
+        Assert.Contains("no commits yet", result.Err);
+    }
+
     // ---------- --uncommitted ----------
 
     [Fact]

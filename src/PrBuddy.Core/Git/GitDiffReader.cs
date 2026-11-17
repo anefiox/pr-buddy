@@ -92,11 +92,64 @@ public static class GitDiffReader
                 OldContent = binary || status == ChangeStatus.Added ? null : Content(repo, entry.OldOid),
                 NewContent = binary || status == ChangeStatus.Deleted ? null : Content(repo, entry.Oid),
                 AddedLines = entry.AddedLines.Select(l => l.LineNumber).ToHashSet(),
+                DeletedLines = entry.DeletedLines.Select(l => l.LineNumber).ToHashSet(),
                 DeletedLineCount = entry.LinesDeleted,
             });
         }
 
         return (new DiffRange(baseRef, headRef, mergeBase.Sha, headCommit.Sha), files);
+    }
+
+    /// <summary>Only the staged changes against HEAD, including the staged version of partially staged files.</summary>
+    public static (DiffRange Range, IReadOnlyList<ChangedFile> Files) ReadStaged(string repoPath)
+    {
+        using var repo = Open(repoPath);
+        var head = repo.Head.Tip ?? throw new PrBuddyException("The repository has no commits yet, so there's nothing to compare against.");
+        EnsureResolvedIndex(repo);
+        var options = new CompareOptions { ContextLines = 0, Similarity = SimilarityOptions.Renames };
+        using var patch = repo.Diff.Compare<Patch>(head.Tree, DiffTargets.Index, null, null, options);
+        var files = new List<ChangedFile>();
+        foreach (var entry in patch)
+        {
+            if (Map(entry.Status) is not { } status) continue;
+            var binary = entry.IsBinaryComparison;
+            files.Add(new ChangedFile
+            {
+                Path = entry.Path,
+                OldPath = entry.OldPath != entry.Path ? entry.OldPath : null,
+                Status = status,
+                IsBinary = binary,
+                OldContent = binary || status == ChangeStatus.Added ? null : Content(repo, entry.OldOid),
+                NewContent = binary || status == ChangeStatus.Deleted ? null : Content(repo, entry.Oid),
+                AddedLines = entry.AddedLines.Select(l => l.LineNumber).ToHashSet(),
+                DeletedLines = entry.DeletedLines.Select(l => l.LineNumber).ToHashSet(),
+                DeletedLineCount = entry.LinesDeleted,
+            });
+        }
+        files.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
+        return (new DiffRange("HEAD", "staged", head.Sha, head.Sha), files);
+    }
+
+    /// <summary>The repo's C# files in the index, including staged additions and deletions.</summary>
+    public static GitSnapshot OpenIndexSnapshot(string repoPath)
+    {
+        var repo = Open(repoPath);
+        try
+        {
+            EnsureResolvedIndex(repo);
+            return new GitSnapshot(repo);
+        }
+        catch
+        {
+            repo.Dispose();
+            throw;
+        }
+    }
+
+    static void EnsureResolvedIndex(Repository repo)
+    {
+        if (repo.Index.Conflicts.Any())
+            throw new PrBuddyException("The index has unresolved merge conflicts. Resolve and stage them before using --staged.");
     }
 
     /// <summary>

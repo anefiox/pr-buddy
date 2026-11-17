@@ -31,6 +31,10 @@ public static class DefaultRules
         new HardcodedSecretRule(),
         new DebuggingLeftoversRule(),
         new ThreadSleepRule(),
+        new RecursiveLoopReentryRule(),
+        new DiscardedCancellationRegistrationRule(),
+        new CallbackCleanupRule(),
+        new CallbackLifetimeRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
