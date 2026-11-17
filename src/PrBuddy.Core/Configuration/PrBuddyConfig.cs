@@ -30,6 +30,12 @@ public sealed class RuleSettings
 /// }
 /// </code>
 /// </summary>
+/// <summary>An API banned by PRB034, with the reason to show and, optionally, the only paths it's banned in.</summary>
+public sealed record BannedApi(string Reason, IReadOnlyList<Glob> In)
+{
+    public bool AppliesTo(string path) => In.Count == 0 || In.Any(g => g.IsMatch(path));
+}
+
 public sealed class PrBuddyConfig
 {
     public const string FileName = "prbuddy.json";
@@ -97,6 +103,35 @@ public sealed class PrBuddyConfig
             map[property.Name] = property.Value.ValueKind == JsonValueKind.String
                 ? property.Value.GetString() ?? ""
                 : throw new PrBuddyException($"{Source}: {ruleId}.{option}.{property.Name} must be a string giving the reason.");
+        return map;
+    }
+
+    /// <summary>
+    /// PRB034's "apis": each entry is a reason, or { "reason": "...", "in": ["src/Domain/**"] } to ban the API
+    /// only in files matching those globs (a layering rule).
+    /// </summary>
+    public IReadOnlyDictionary<string, BannedApi> GetBannedApis(string ruleId, string option)
+    {
+        if (!For(ruleId).Options.TryGetValue(option, out var value)) return new Dictionary<string, BannedApi>();
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new PrBuddyException($"{Source}: {ruleId}.{option} must be an object keyed by API name.");
+        var map = new Dictionary<string, BannedApi>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+        {
+            var where = $"{Source}: {ruleId}.{option}.{property.Name}";
+            map[property.Name] = property.Value.ValueKind switch
+            {
+                JsonValueKind.String => new BannedApi(property.Value.GetString() ?? "", []),
+                JsonValueKind.Object => new BannedApi(
+                    property.Value.TryGetProperty("reason", out var reason) && reason.ValueKind == JsonValueKind.String ? reason.GetString() ?? "" : "",
+                    property.Value.TryGetProperty("in", out var paths)
+                        ? paths.ValueKind == JsonValueKind.Array && paths.EnumerateArray().All(p => p.ValueKind == JsonValueKind.String)
+                            ? paths.EnumerateArray().Select(p => new Glob(p.GetString()!)).ToList()
+                            : throw new PrBuddyException($"{where}.in must be a list of path globs.")
+                        : []),
+                _ => throw new PrBuddyException($"{where} must be a reason, or {{ \"reason\": \"...\", \"in\": [\"globs\"] }}."),
+            };
+        }
         return map;
     }
 

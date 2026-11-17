@@ -51,11 +51,13 @@ public static class DefaultRules
         new HardcodedCredentialValueRule(),
         new UndiscoverableMigrationRule(),
         new HistoryCommentRule(),
-        new BannedApiRule(config.GetStringMap("PRB034", "apis"), config.GetBool("PRB034", "includeTests", false)),
+        new BannedApiRule(config.GetBannedApis("PRB034", "apis"), config.GetBool("PRB034", "includeTests", false)),
         new FileNullableEnableRule(),
         new StrayWhitespaceRule(),
         new RepeatedConditionCallRule(),
         new CapturingRegistrationRule(),
+        new ForkedConstructorRule(),
+        new RepeatedNullCheckRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),

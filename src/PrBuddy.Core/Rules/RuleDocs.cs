@@ -120,7 +120,7 @@ public static class RuleDocs
             "Put the history in the commit message or PR description, and keep comments for invariants and reasons."),
         ["PRB034"] = Doc(
             "The code calls an API this repository has banned in prbuddy.json. Matching is by name: \"Utf8Parser.TryParse\" matches that call however it's qualified, and \".Chunk\" matches any member called Chunk. Tests are skipped unless includeTests is true. The rule does nothing until you list APIs.",
-            "Use what the reason says instead. To ban something: \"PRB034\": { \"apis\": { \"Utf8Parser.TryParse\": \"Use SessionParseState.TryGetInt\", \".Chunk\": \"No LINQ in hot paths\" } }."),
+            "Use what the reason says instead. An entry can be scoped to paths, which makes it a layering rule: \"AccreditationApiMapper\": { \"reason\": \"The domain must not use the API layer\", \"in\": [\"**/DomainModel/**\"] }. To ban something everywhere: \"PRB034\": { \"apis\": { \"Utf8Parser.TryParse\": \"Use SessionParseState.TryGetInt\", \".Chunk\": \"No LINQ in hot paths\" } }."),
         ["PRB035"] = Doc(
             "A new #nullable enable turns nullable warnings on for one file. In a project with nullable off, that pulls annotation changes into code the PR isn't about; in a project with it on, the line does nothing. The project setting comes from the nearest .csproj or Directory.Build.props.",
             "Remove it, or turn nullable on for the whole project in a PR of its own."),
@@ -133,6 +133,12 @@ public static class RuleDocs
         ["PRB038"] = Doc(
             "CancellationToken.Register or UnsafeRegister is given a lambda that captures one variable. Each call allocates a closure and a delegate; the overload that takes a state object, with a static lambda, avoids both.",
             "Use Register(static state => ((T)state!).Cancel(), value). It matters most on hot paths."),
+        ["PRB039"] = Doc(
+            "A new constructor builds its base the same way another constructor does (both call base(new X(...))) instead of chaining to it with this(...). Construction then happens in two places, and a later change to one misses the other.",
+            "Chain to the existing constructor with this(...), adding the new values to it if needed."),
+        ["PRB040"] = Doc(
+            "A nullable parameter is null-checked three times or more in a new method or constructor (options?.A, options?.B, options ?? ...). Each check is another branch to read and test.",
+            "Default it once at the top (options ??= new Options();), or make the parameter non-nullable with a default value."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),

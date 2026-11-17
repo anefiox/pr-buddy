@@ -227,11 +227,13 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB031 | warning | Credential-named value (`ClientSecret`, `ApiKey`, `AccessToken`) set to a random-looking literal; `ClientId`-style ids are info |
 | PRB032 | warning | New EF Core migration with no `.Designer.cs` and no `[Migration]` attribute, so EF never applies it |
 | PRB033 | info | New comment narrates the change ("the former…", "used to…", "now uses…", "this PR") instead of the code |
-| PRB034 | warning | Call to an API banned in `prbuddy.json` (`"PRB034": { "apis": { "Utf8Parser.TryParse": "reason" } }`) |
+| PRB034 | warning | Call to an API banned in `prbuddy.json` (`"PRB034": { "apis": { "Utf8Parser.TryParse": "reason" } }`); entries can be scoped to paths (`{ "reason": "...", "in": ["**/Domain/**"] }`) for layering |
 | PRB035 | info | New `#nullable enable` in one file; says whether the project already has nullable on or off |
 | PRB036 | info | Added C# lines with trailing whitespace, or blank lines that aren't empty |
 | PRB037 | info | The same call used as a condition twice in one method |
 | PRB038 | info | `CancellationToken.Register` lambda that captures a variable instead of using the state overload |
+| PRB039 | info | New constructor builds `base(new X(...))` like another one instead of chaining with `this(...)` |
+| PRB040 | info | Nullable parameter null-checked three or more times in one method |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
