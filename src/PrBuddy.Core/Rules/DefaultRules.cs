@@ -38,6 +38,7 @@ public static class DefaultRules
         new PrematureLoadGuardRule(),
         new GrowOnlyCollectionFieldRule(),
         new FlagsEnumValueRule(),
+        new AsyncSuffixRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -45,11 +46,14 @@ public static class DefaultRules
         new SkippedTestRule(),
         new TestWithoutAssertionsRule(),
         new ReflectionIntoPrivatesRule(),
+        new TimingAssertionRule(),
+        new BareBooleanAssertsRule(),
 
         // Config and dependencies (PRB2xx)
         new BuildConfigChangedRule(),
         new NewPackageRule(registry),
         new WeakenedChecksRule(),
+        new UnpinnedWorkflowDependencyRule(),
 
         // Structure, using the whole repo (PRB3xx)
         new UnusedNewCodeRule(),

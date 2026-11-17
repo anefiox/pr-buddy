@@ -7,6 +7,8 @@ public static class FileClassifier
 {
     static readonly HashSet<string> TestDirectories = new(StringComparer.OrdinalIgnoreCase) { "test", "tests", "spec", "specs" };
     static readonly string[] TestDirectorySuffixes = [".tests", ".test", ".unittests", ".integrationtests", ".specs"];
+    static readonly HashSet<string> TestProjectParts = new(StringComparer.OrdinalIgnoreCase)
+        { "Tests", "Test", "UnitTests", "IntegrationTests", "Specs" };
     static readonly string[] GeneratedSuffixes = [".g.cs", ".g.i.cs", ".designer.cs", ".generated.cs"];
     static readonly string[] ProjectExtensions = [".csproj", ".fsproj", ".vbproj", ".props", ".targets"];
     static readonly string[] BuildConfigExtensions = [".globalconfig", ".ruleset"];
@@ -28,7 +30,9 @@ public static class FileClassifier
         var segments = Normalize(path).Split('/');
         var directories = segments[..^1];
         if (directories.Any(d => TestDirectories.Contains(d) ||
-                                 TestDirectorySuffixes.Any(s => d.EndsWith(s, StringComparison.OrdinalIgnoreCase))))
+                                 TestDirectorySuffixes.Any(s => d.EndsWith(s, StringComparison.OrdinalIgnoreCase)) ||
+                                 // "App.Tests.Unit", "App.UnitTests.Core": a dotted project name with a test part.
+                                 d.Split('.').Skip(1).Any(TestProjectParts.Contains)))
             return true;
 
         // Case-sensitive on purpose: "FooTests.cs" yes, "latest.cs" no.

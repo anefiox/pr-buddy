@@ -214,14 +214,18 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB018 | warning | A guard returns early once a member is set, but the member is set in a try before later work that can fail, so a failure is never retried |
 | PRB019 | warning | New collection field of objects that's added to but never removed from; only cleared in another method (info) |
 | PRB020 | warning | New `[Flags]` enum member whose value isn't a single bit, written as a number or left implicit |
+| PRB021 | info | New non-public async method without the Async suffix, in a type whose other async methods have it |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
 | PRB104 | warning | Test with no assertions, or only `Assert.True(true)`-style ones |
 | PRB105 | info | Test looks up a non-public member through reflection (`BindingFlags.NonPublic`) |
+| PRB106 | warning | Test asserts on measured time (Stopwatch elapsed, DateTime difference) |
+| PRB107 | info | Test with two or more Assert.True/False calls and no messages |
 | PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
 | PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |
+| PRB204 | warning | Workflow action or container image referenced by tag rather than a commit SHA or digest (info if the file pins nothing) |
 | PRB301 | warning | New private member nothing in its file uses; new internal type nothing in the repo references (info) |
 | PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
 | PRB303 | info | Most of the PR is in one area, but a few changes land elsewhere |

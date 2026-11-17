@@ -219,6 +219,8 @@ public class ConfigRuleTests
     [InlineData("tests/Foo.cs", true)]
     [InlineData("src/App.Tests/Foo.cs", true)]
     [InlineData("src/App/CalculatorTests.cs", true)]
+    [InlineData("src/App.Tests.Unit/Fixture/Stub.cs", true)]
+    [InlineData("src/Test.Harness/Foo.cs", false)]
     [InlineData("src/App/latest.cs", false)]
     [InlineData("src/App/Contest.cs", false)]
     [InlineData("src/App/Calculator.cs", false)]

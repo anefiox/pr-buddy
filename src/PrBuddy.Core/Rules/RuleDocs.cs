@@ -79,6 +79,9 @@ public static class RuleDocs
         ["PRB020"] = Doc(
             "A new member of a [Flags] enum has a plain number, or an implicit value, that isn't a single bit. It overlaps other flags, so setting it also sets them and HasFlag checks give the wrong answer. Values written with member names, zero, -1 and an all-flags mask are allowed.",
             "Give it the next free power of two, or write the combination with member names (A | B) if that's what it means."),
+        ["PRB021"] = Doc(
+            "A new non-public method returns a Task or ValueTask but has no Async suffix, while at least two other task-returning methods in the same type do. The name no longer tells callers it has to be awaited. Public, protected, override and attributed methods are skipped, since their names can be fixed by an outside contract.",
+            "Rename it with the Async suffix, matching the rest of the type."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -94,6 +97,12 @@ public static class RuleDocs
         ["PRB105"] = Doc(
             "A test looks up a non-public member by name with BindingFlags.NonPublic. Renaming or changing that member still compiles and only fails when the test runs, and the test is tied to implementation details.",
             "Make the member internal and expose it with InternalsVisibleTo, or test the behavior through the public API."),
+        ["PRB106"] = Doc(
+            "A test asserts on measured time: a Stopwatch's Elapsed, a DateTime difference. Shared CI machines pause and throttle, so the bound either fails at random or is so loose it misses the regression it was written for.",
+            "Move the timing check into a benchmark that is tracked over time, or assert on behavior that causes the speed, such as no wait being started."),
+        ["PRB107"] = Doc(
+            "A test has two or more Assert.True or Assert.False calls with no message. When one fails, the output only says a value was false, so you have to rerun or debug to find which check it was.",
+            "Give each a message, or use an assertion that shows the values, such as Assert.Equal or Assert.Contains."),
         ["PRB201"] = Doc(
             "CI workflows, `.editorconfig`, `Directory.Build.*` and `prbuddy.json` change how every other change is built and checked, so they deserve their own look.",
             "Make sure the change is intended and doesn't weaken checks (see PRB203)."),
@@ -103,6 +112,9 @@ public static class RuleDocs
         ["PRB203"] = Doc(
             "`<NoWarn>`, `<Nullable>disable`, turning analyzers off or setting rule severity to none silences warnings for the whole project, not just one line.",
             "Fix the warnings, or suppress one specific warning where it happens, with a justification."),
+        ["PRB204"] = Doc(
+            "A GitHub workflow uses an action, or pulls a container image, by tag or branch. Tags can be moved and images re-pushed, so the code that runs in CI, with its secrets, can change without a commit in this repo. It's a warning when the same file already pins other actions to a commit SHA.",
+            "Pin actions to a full commit SHA with the version in a comment, and images with @sha256:<digest>. Put a new publisher through your dependency review."),
         ["PRB301"] = Doc(
             "New code nothing calls is dead on arrival: something to read, maintain and test that does nothing. Generated code often adds helpers it never uses. Matching is by name, and members an outside caller might use (attributes, overrides, callbacks, extension holders) are skipped.",
             "Delete it, or use it. If it's called by something PR Buddy can't see (reflection, a framework convention), suppress it with that reason."),

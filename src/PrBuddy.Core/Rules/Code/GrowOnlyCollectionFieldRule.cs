@@ -127,6 +127,7 @@ public sealed class GrowOnlyCollectionFieldRule : AddedCodeRule
         return generic.TypeArgumentList.Arguments.Select(a => a switch
         {
             NullableTypeSyntax n => n.ElementType.ToString(),
+            ArrayTypeSyntax array => array.ElementType.ToString(), // string[] holds no objects worth tracking either
             _ => a.ToString(),
         }).ToArray();
     }

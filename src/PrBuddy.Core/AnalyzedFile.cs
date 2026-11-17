@@ -7,7 +7,14 @@ namespace PrBuddy.Core;
 /// <summary>A <see cref="ChangedFile"/> plus lazily computed syntax trees and helpers rules share.</summary>
 public sealed class AnalyzedFile
 {
-    static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview);
+    /// <summary>
+    /// Parses as a current .NET build does, so code behind #if NET or NET8_0_OR_GREATER is analyzed
+    /// rather than treated as inactive text. Older-framework branches (#if NETFRAMEWORK) stay inactive.
+    /// </summary>
+    internal static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview,
+        preprocessorSymbols: ["NET", "NETCOREAPP", "TRACE",
+            .. new[] { "1_0", "1_1", "2_0", "2_1", "2_2", "3_0", "3_1" }.Select(v => $"NETCOREAPP{v}_OR_GREATER"),
+            .. Enumerable.Range(5, 6).Select(v => $"NET{v}_0_OR_GREATER"), "NET10_0"]);
 
     readonly Lazy<SyntaxTree?> _oldTree;
     readonly Lazy<SyntaxTree?> _newTree;
@@ -122,7 +129,7 @@ public sealed class PullRequestContext
         if (_repoTrees is not null) return _repoTrees;
 
         var changed = Files.Where(f => f.IsCSharp && f.NewTree is not null).ToDictionary(f => f.Path, f => f);
-        var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
+        var parseOptions = AnalyzedFile.ParseOptions;
 
         // Read in order on this thread (the snapshot may sit on a git repository, which isn't
         // thread-safe), then parse in parallel (Roslyn parsing is). AsOrdered keeps the output
