@@ -13,6 +13,14 @@ public sealed class WeakenedTestsRule : RuleBase
 
     public override IEnumerable<Finding> Analyze(PullRequestContext context)
     {
+        // Tests often move to another file or a renamed class. One that turns up anywhere in the PR's
+        // test files, by name or with the same body, wasn't removed.
+        var everyNewTest = context.CSharpFiles.Where(f => f.IsTestFile && f.NewTree is not null)
+            .SelectMany(f => TestSyntax.TestMethods(f.NewTree!.GetRoot())).ToList();
+        var newNames = everyNewTest.Select(t => t.Identifier.Text).ToHashSet(StringComparer.Ordinal);
+        bool MovedElsewhere(MethodDeclarationSyntax old) =>
+            newNames.Contains(old.Identifier.Text) || everyNewTest.Any(n => SameBody(old, n));
+
         foreach (var file in context.CSharpFiles.Where(f => f.IsTestFile && f.OldTree is not null))
         {
             var oldTests = TestSyntax.TestMethods(file.OldTree!.GetRoot()).ToList();
@@ -20,7 +28,11 @@ public sealed class WeakenedTestsRule : RuleBase
 
             if (file.NewTree is null)
             {
-                yield return Report(file.Path, null, $"Test file deleted, taking {oldTests.Count} test(s) with it.");
+                var gone = oldTests.Count(t => !MovedElsewhere(t));
+                if (gone > 0)
+                    yield return Report(file.Path, null, gone == oldTests.Count
+                        ? $"Test file deleted, taking {gone} test(s) with it."
+                        : $"Test file deleted. {oldTests.Count - gone} of its tests moved elsewhere, but {gone} didn't.");
                 continue;
             }
 
@@ -38,7 +50,7 @@ public sealed class WeakenedTestsRule : RuleBase
                         yield return Report(file.Path, AnalyzedFile.LineOf(current.Identifier),
                             $"{key} went from {before} assertion(s) to {after}. Was the test weakened to make it pass?");
                 }
-                else if (!newTests.Any(n => SameBody(old, n)))
+                else if (!newTests.Any(n => SameBody(old, n)) && !MovedElsewhere(old))
                 {
                     yield return Report(file.Path, null, $"Test {key} was removed.");
                 }

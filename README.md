@@ -215,6 +215,12 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB019 | warning | New collection field of objects that's added to but never removed from; only cleared in another method (info) |
 | PRB020 | warning | New `[Flags]` enum member whose value isn't a single bit, written as a number or left implicit |
 | PRB021 | info | New non-public async method without the Async suffix, in a type whose other async methods have it |
+| PRB022 | warning | Parameter of a new non-public method that's never used, or an unused `[FromQuery]`/`[FromBody]`-bound parameter |
+| PRB023 | info | Stray `;` (an empty statement); a warning right after `if`/`while`/`for` |
+| PRB024 | info | New or renamed file whose single type has a different name, including a case-only difference |
+| PRB025 | info | Parameter named like an id (`orderId`) whose type is the object (`Order`) |
+| PRB026 | info | String encoded with `GetBytes` and then refused by a length check, instead of checking `GetByteCount` first |
+| PRB027 | warning | Inner catch calls the same error handler as the catch-all around it, so an error can be handled twice |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |

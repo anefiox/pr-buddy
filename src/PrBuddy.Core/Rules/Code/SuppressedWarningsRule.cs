@@ -13,6 +13,8 @@ public sealed class SuppressedWarningsRule : AddedCodeRule
 
     protected override IEnumerable<Finding> AnalyzeFile(AnalyzedFile file, SyntaxNode root)
     {
+        // [assembly: SuppressMessage] lines (GlobalSuppressions.cs) come in batches: report them together.
+        var assemblyWide = new List<AttributeSyntax>();
         foreach (var node in root.DescendantNodes(descendIntoTrivia: true))
         {
             if (!file.IsNew(node)) continue;
@@ -29,10 +31,32 @@ public sealed class SuppressedWarningsRule : AddedCodeRule
                     yield return Report(file, nullable, "#nullable disable turns off null-safety checks for the code below it.");
                     break;
 
+                case AttributeSyntax attribute when SuppressAttributes.Contains(SyntaxHelpers.AttributeName(attribute)) &&
+                    attribute.Parent is AttributeListSyntax { Target.Identifier.ValueText: "assembly" or "module" }:
+                    assemblyWide.Add(attribute);
+                    break;
+
                 case AttributeSyntax attribute when SuppressAttributes.Contains(SyntaxHelpers.AttributeName(attribute)):
                     yield return Report(file, attribute, $"[{SyntaxHelpers.Truncate(attribute.ToString())}] hides an analyzer warning. Check the justification.");
                     break;
             }
         }
+
+        if (assemblyWide.Count == 1)
+            yield return Report(file, assemblyWide[0], $"[{SyntaxHelpers.Truncate(assemblyWide[0].ToString())}] hides an analyzer warning for the whole assembly. Check the justification.");
+        else if (assemblyWide.Count > 1)
+        {
+            var ids = assemblyWide.Select(RuleId).Where(id => id is not null).Distinct().ToArray();
+            yield return Report(file, assemblyWide[0],
+                $"{assemblyWide.Count} assembly-wide [SuppressMessage] attributes hide analyzer rules for the whole project" +
+                (ids.Length > 0 ? $": {string.Join(", ", ids.Take(8))}{(ids.Length > 8 ? ", ..." : "")}" : "") +
+                ". Check each justification, or turn the rules off in .editorconfig where the choice is visible.");
+        }
     }
+
+    /// <summary>"SA1101:PrefixLocalCallsWithThis" → SA1101.</summary>
+    static string? RuleId(AttributeSyntax attribute) =>
+        attribute.ArgumentList?.Arguments.Skip(1).FirstOrDefault()?.Expression is LiteralExpressionSyntax literal
+            ? literal.Token.ValueText.Split(':')[0].Trim()
+            : null;
 }

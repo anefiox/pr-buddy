@@ -78,10 +78,19 @@ public static class TestSyntax
             "That" => args.Count == 1 && first.IsKind(SyntaxKind.TrueLiteralExpression),
             "False" or "IsFalse" => first.IsKind(SyntaxKind.FalseLiteralExpression),
             "Equal" or "AreEqual" or "StrictEqual" or "Same" or "AreSame" =>
-                args.Count >= 2 && first.IsEquivalentTo(args[1].Expression, topLevel: false),
+                args.Count >= 2 && first.IsEquivalentTo(args[1].Expression, topLevel: false) && !BuildsAValue(first),
             _ => false,
         };
     }
+
+    /// <summary>
+    /// Assert.Equal(new Money(5), new Money(5)) builds two values and checks value equality, which can
+    /// fail. Only the same variable or constant on both sides is sure to pass.
+    /// </summary>
+    static bool BuildsAValue(ExpressionSyntax expression) =>
+        expression.DescendantNodesAndSelf().Any(n => n is BaseObjectCreationExpressionSyntax or InvocationExpressionSyntax
+            or AnonymousObjectCreationExpressionSyntax or CollectionExpressionSyntax or ArrayCreationExpressionSyntax
+            or ImplicitArrayCreationExpressionSyntax or WithExpressionSyntax);
 
     static (string? Receiver, string Name) Describe(InvocationExpressionSyntax invocation) => invocation.Expression switch
     {

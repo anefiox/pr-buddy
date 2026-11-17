@@ -82,6 +82,24 @@ public static class RuleDocs
         ["PRB021"] = Doc(
             "A new non-public method returns a Task or ValueTask but has no Async suffix, while at least two other task-returning methods in the same type do. The name no longer tells callers it has to be awaited. Public, protected, override and attributed methods are skipped, since their names can be fixed by an outside contract.",
             "Rename it with the Async suffix, matching the rest of the type."),
+        ["PRB022"] = Doc(
+            "A parameter of a new method is never read. Either it's left over, or the code forgot to use it and quietly ignores what callers pass. Public, protected, virtual and override methods are skipped, since an interface or caller elsewhere may need the parameter, except for parameters ASP.NET binds with [FromQuery], [FromBody] and the like, whose values a client sends.",
+            "Remove the parameter, or use it if it was meant to change the result. Prefix it with _ if it has to stay."),
+        ["PRB023"] = Doc(
+            "A lone ';' is an empty statement. After a block (\"};\") it's noise. Right after if, while or for it is the whole body, so the block below runs regardless of the condition.",
+            "Remove it. If an empty loop body is meant, write {} so the intent is visible."),
+        ["PRB024"] = Doc(
+            "A new or renamed file holds one type whose name doesn't match the file name. Go-to-file and search land in the wrong place, and a case-only mismatch causes trouble on case-sensitive file systems. Partial types and Name.Suffix.cs files are allowed.",
+            "Rename the file or the type so they match exactly."),
+        ["PRB025"] = Doc(
+            "A new parameter is named like an id (orderId) but its type is the object itself (Order). Readers and callers expect a number or key and get confused about what to pass.",
+            "Name it after the object (order), or pass the id instead."),
+        ["PRB026"] = Doc(
+            "A string is encoded to a byte array and the next statement refuses it when the array is too long. An oversized input, often untrusted, makes the code allocate its whole size before refusing it.",
+            "Check Encoding.GetByteCount(text) against the limit first, then encode."),
+        ["PRB027"] = Doc(
+            "A catch inside a try calls the same error handler as the catch-all around it. If the handler throws, as handlers that honour a throw-on-error option do, the outer catch handles the error again and the caller sees it wrapped twice.",
+            "Throw from the inner catch, adding context if needed, and let the outer catch handle the error once."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),

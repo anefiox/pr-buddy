@@ -39,6 +39,12 @@ public static class DefaultRules
         new GrowOnlyCollectionFieldRule(),
         new FlagsEnumValueRule(),
         new AsyncSuffixRule(),
+        new UnusedParameterRule(),
+        new StraySemicolonRule(),
+        new FileNameMismatchRule(),
+        new MisleadingIdNameRule(),
+        new EncodeBeforeLengthCheckRule(),
+        new DoubleErrorHandlingRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
