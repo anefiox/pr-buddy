@@ -21,6 +21,9 @@ public static class Cli
             ColorSystem = ColorSystemSupport.NoColors,
             Interactive = InteractionSupport.No,
             Out = new AnsiConsoleOutput(console),
+            // Spectre's CI enrichers (GitHub Actions, Azure Pipelines...) switch ANSI back on after these
+            // settings are read, which puts escape codes in the output and breaks every text assertion.
+            Enrichment = new ProfileEnrichment { UseDefaultEnrichers = false },
         });
         ansi.Profile.Width = 250; // wide enough that table cells don't wrap mid-word
 
