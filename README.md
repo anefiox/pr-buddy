@@ -234,6 +234,8 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB038 | info | `CancellationToken.Register` lambda that captures a variable instead of using the state overload |
 | PRB039 | info | New constructor builds `base(new X(...))` like another one instead of chaining with `this(...)` |
 | PRB040 | info | Nullable parameter null-checked three or more times in one method |
+| PRB041 | info | CancellationToken parameter with no default that the PR's callers fill with `CancellationToken.None` three or more times |
+| PRB042 | info | Call with two or more unnamed `null`/`true`/`false` arguments |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |

@@ -139,6 +139,12 @@ public static class RuleDocs
         ["PRB040"] = Doc(
             "A nullable parameter is null-checked three times or more in a new method or constructor (options?.A, options?.B, options ?? ...). Each check is another branch to read and test.",
             "Default it once at the top (options ??= new Options();), or make the parameter non-nullable with a default value."),
+        ["PRB041"] = Doc(
+            "A method the PR adds or changes takes a CancellationToken with no default, and the PR's own callers pass CancellationToken.None or default to it three times or more. The parameter is forcing callers to say nothing.",
+            "Declare it 'CancellationToken cancellationToken = default' and drop the empty arguments."),
+        ["PRB042"] = Doc(
+            "A call passes two or more bare null, true or false arguments by position. Readers can't tell which parameter each fills, and swapping two compiles fine.",
+            "Name them at the call: new DeviceInfo(id, name: null, model: null, rid). Test files are skipped."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),

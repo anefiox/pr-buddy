@@ -58,6 +58,8 @@ public static class DefaultRules
         new CapturingRegistrationRule(),
         new ForkedConstructorRule(),
         new RepeatedNullCheckRule(),
+        new TokenWithoutDefaultRule(),
+        new UnnamedLiteralArgumentsRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
