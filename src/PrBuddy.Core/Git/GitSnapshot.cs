@@ -18,6 +18,7 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
         var paths = new List<string>();
         Collect(commit.Tree, "", paths);
         CSharpPaths = paths;
+        ProjectPaths = _projects;
     }
 
     internal GitSnapshot(Repository repo)
@@ -27,9 +28,20 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
             if (repo.Lookup<Blob>(entry.Id) is { } blob)
                 _blobs[entry.Path] = blob;
         CSharpPaths = _blobs.Keys.ToList();
+        foreach (var entry in repo.Index.Where(e => FileClassifier.IsProjectOrBuildProps(e.Path)).OrderBy(e => e.Path, StringComparer.Ordinal))
+            if (repo.Lookup<Blob>(entry.Id) is { } blob)
+            {
+                _blobs[entry.Path] = blob;
+                _projects.Add(entry.Path);
+            }
+        ProjectPaths = _projects;
     }
 
+    readonly List<string> _projects = [];
+
     public IReadOnlyList<string> CSharpPaths { get; }
+
+    public IReadOnlyList<string> ProjectPaths { get; }
 
     public string? Read(string path) =>
         _blobs.TryGetValue(path, out var blob) && blob is { Size: <= MaxFileBytes, IsBinary: false } ? blob.GetContentText() : null;
@@ -43,6 +55,11 @@ public sealed class GitSnapshot : IRepoSnapshot, IDisposable
             else if (entry.TargetType == TreeEntryTargetType.Blob && FileClassifier.IsCSharp(path))
             {
                 paths.Add(path);
+                _blobs[path] = (Blob)entry.Target;
+            }
+            else if (entry.TargetType == TreeEntryTargetType.Blob && FileClassifier.IsProjectOrBuildProps(path))
+            {
+                _projects.Add(path);
                 _blobs[path] = (Blob)entry.Target;
             }
         }
@@ -61,9 +78,30 @@ public sealed class WorkingTreeSnapshot : IRepoSnapshot, IDisposable
     {
         _workdir = workdir;
         CSharpPaths = paths;
+        _projects = new(() => paths.Select(p => System.IO.Path.GetDirectoryName(p)?.Replace('\\', '/') ?? "").Distinct()
+            .SelectMany(Ancestors).Distinct()
+            .SelectMany(dir => Directory.Exists(System.IO.Path.Combine(_workdir, dir))
+                ? Directory.EnumerateFiles(System.IO.Path.Combine(_workdir, dir), "*", SearchOption.TopDirectoryOnly)
+                    .Select(f => System.IO.Path.GetRelativePath(_workdir, f).Replace('\\', '/'))
+                : [])
+            .Where(FileClassifier.IsProjectOrBuildProps).Order(StringComparer.Ordinal).ToList());
     }
 
+    readonly Lazy<List<string>> _projects;
+
     public IReadOnlyList<string> CSharpPaths { get; }
+
+    /// <summary>Project files in the folders that hold C# files, and in the folders above them.</summary>
+    public IReadOnlyList<string> ProjectPaths => _projects.Value;
+
+    static IEnumerable<string> Ancestors(string dir)
+    {
+        for (var d = dir; ; d = System.IO.Path.GetDirectoryName(d)?.Replace('\\', '/') ?? "")
+        {
+            yield return d;
+            if (d.Length == 0) yield break;
+        }
+    }
 
     public string? Read(string path)
     {

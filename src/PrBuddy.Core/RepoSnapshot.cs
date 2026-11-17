@@ -11,6 +11,9 @@ public interface IRepoSnapshot
 
     /// <summary>File content, or null if it doesn't exist or is too big to be worth reading.</summary>
     string? Read(string path);
+
+    /// <summary>Paths of project files (*.csproj) and Directory.Build.props, which <see cref="Read"/> can read.</summary>
+    IReadOnlyList<string> ProjectPaths => [];
 }
 
 public sealed class InMemorySnapshot(IReadOnlyDictionary<string, string> files) : IRepoSnapshot
@@ -19,6 +22,9 @@ public sealed class InMemorySnapshot(IReadOnlyDictionary<string, string> files) 
         files.Keys.Where(FileClassifier.IsCSharp).Order(StringComparer.Ordinal).ToList();
 
     public string? Read(string path) => files.TryGetValue(path, out var content) ? content : null;
+
+    public IReadOnlyList<string> ProjectPaths { get; } =
+        files.Keys.Where(FileClassifier.IsProjectOrBuildProps).Order(StringComparer.Ordinal).ToList();
 
     /// <summary>A snapshot of just the PR's own files, for when the rest of the repo isn't available.</summary>
     public static InMemorySnapshot FromChangedFiles(IEnumerable<ChangedFile> files) =>

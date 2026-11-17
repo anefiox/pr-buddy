@@ -100,6 +100,12 @@ public static class RuleDocs
         ["PRB027"] = Doc(
             "A catch inside a try calls the same error handler as the catch-all around it. If the handler throws, as handlers that honour a throw-on-error option do, the outer catch handles the error again and the caller sees it wrapped twice.",
             "Throw from the inner catch, adding context if needed, and let the outer catch handle the error once."),
+        ["PRB028"] = Doc(
+            "A media type or content type is matched with Contains, or an exact comparison is OR'ed with a Contains of the same value. Contains accepts anything that merely includes the text, and makes the exact check next to it pointless.",
+            "Compare the media type, without parameters, with Equals and StringComparison.OrdinalIgnoreCase. Keep Contains only if partial matches are really wanted."),
+        ["PRB029"] = Doc(
+            "A new property only returns, and maybe assigns, a private field that nothing else needs directly. That's two declarations for what an auto-property says in one. Fields passed by ref, locked on or marked volatile are left alone.",
+            "Replace the pair with an auto-property, using a private setter if the field is assigned elsewhere."),
         ["PRB101"] = Doc(
             "Behavior changed but no test changed, so either the change isn't tested or existing tests don't cover it.",
             "Add or update a test that would fail without the change. If none is needed (a pure refactor the semantic diff misread, say), mention it in the PR description."),
@@ -121,6 +127,9 @@ public static class RuleDocs
         ["PRB107"] = Doc(
             "A test has two or more Assert.True or Assert.False calls with no message. When one fails, the output only says a value was false, so you have to rerun or debug to find which check it was.",
             "Give each a message, or use an assertion that shows the values, such as Assert.Equal or Assert.Contains."),
+        ["PRB108"] = Doc(
+            "Test code names a real external host in a URL. A test that calls it depends on the network and on someone else's server; one that only uses it as data can still resolve it by accident. Reserved names (example.com, *.test, *.invalid, localhost), private addresses and well-known schema URIs are allowed.",
+            "Use example.com, a .test name or localhost for data. For a real dependency such as a script, ship it with the tests or serve it locally."),
         ["PRB201"] = Doc(
             "CI workflows, `.editorconfig`, `Directory.Build.*` and `prbuddy.json` change how every other change is built and checked, so they deserve their own look.",
             "Make sure the change is intended and doesn't weaken checks (see PRB203)."),
@@ -146,6 +155,9 @@ public static class RuleDocs
             "Small changes far from the rest of a PR are easy to miss in review and often unintended: a stray edit, or a second change hiding inside the first. Areas that usually change together in the last 300 commits don't count.",
             "Move unrelated changes into their own PR, or say in the description why they belong.",
             new RuleOption("focusShare", "0.7", "Share of changed code the main area needs")),
+        ["PRB304"] = Doc(
+            "A public member of a public type was removed, renamed or given different parameters. Code outside this repository that uses it stops compiling, or fails at run time against a new binary. Changes to attributes, modifiers or the return type alone aren't reported.",
+            "If anyone builds against this, keep the old signature as an overload (perhaps [Obsolete]) or call out the break in the release notes."),
         ["PRB900"] = Doc(
             "A prbuddy-ignore comment without a reason, or naming a rule that doesn't exist, isn't applied, so the finding stays. A suppression this PR adds that matches nothing is reported too (as info): usually a wrong id or a leftover.",
             "Give the reason after a colon (`prbuddy-ignore PRB001: why this is fine`), fix the rule id, or remove the comment."),

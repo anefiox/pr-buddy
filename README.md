@@ -221,6 +221,8 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB025 | info | Parameter named like an id (`orderId`) whose type is the object (`Order`) |
 | PRB026 | info | String encoded with `GetBytes` and then refused by a length check, instead of checking `GetByteCount` first |
 | PRB027 | warning | Inner catch calls the same error handler as the catch-all around it, so an error can be handled twice |
+| PRB028 | info | Media type matched with `Contains`, or an exact check OR'ed with a `Contains` of the same value |
+| PRB029 | info | New property that only wraps a private field and could be an auto-property |
 | PRB101 | warning | Behavior changed but no test files touched |
 | PRB102 | warning | Existing test lost assertions, or was deleted |
 | PRB103 | warning | Test newly skipped or ignored |
@@ -228,6 +230,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB105 | info | Test looks up a non-public member through reflection (`BindingFlags.NonPublic`) |
 | PRB106 | warning | Test asserts on measured time (Stopwatch elapsed, DateTime difference) |
 | PRB107 | info | Test with two or more Assert.True/False calls and no messages |
+| PRB108 | info | Test code names a real external host (not example.com, `.test`, localhost or a private address) |
 | PRB201 | info | CI, `.editorconfig`, `Directory.Build.*` or `prbuddy.json` changed |
 | PRB202 | warning | New NuGet package (version bumps ignored); names one keystroke from a popular package are called out |
 | PRB203 | warning | `<NoWarn>`, `<Nullable>disable`, analyzers off, rule severity set to none |
@@ -235,6 +238,7 @@ Members that only moved around in the file aren't reported at all. Members moved
 | PRB301 | warning | New private member nothing in its file uses; new internal type nothing in the repo references (info) |
 | PRB302 | warning | New method that's a copy (95%+) of an existing one; 80–95% similar is info |
 | PRB303 | info | Most of the PR is in one area, but a few changes land elsewhere |
+| PRB304 | info | Public member removed, renamed or given different parameters |
 | PRB900 | warning | `prbuddy-ignore` without a reason or naming an unknown rule; a new one that matches nothing (info) |
 
 Run `prbuddy --explain <id>` for why a rule exists, what to do when it fires, and its options.

@@ -20,6 +20,11 @@ public static class FileClassifier
         Configuration.PrBuddyConfig.FileName,
     };
 
+    /// <summary>A *.csproj, or a Directory.Build.props that sets properties for the projects below it.</summary>
+    public static bool IsProjectOrBuildProps(string path) =>
+        path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+        System.IO.Path.GetFileName(path).Equals("Directory.Build.props", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsCSharp(string path) => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsProjectFile(string path) =>

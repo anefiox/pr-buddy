@@ -16,7 +16,8 @@ public sealed partial class PlaceholderRule : AddedCodeRule
         {
             if (!file.IsNew(node)) continue;
 
-            if (ThrowsNotImplemented(node))
+            // A fake or mock in a test leaves the interface members it doesn't need unimplemented on purpose.
+            if (ThrowsNotImplemented(node) && !(file.IsTestFile && InTestDouble(node)))
                 yield return Report(file, node, "Throws NotImplementedException: this code path isn't finished.");
             // Placeholder-looking strings are normal test data, so only check production code.
             else if (!file.IsTestFile && node is LiteralExpressionSyntax literal &&
@@ -44,6 +45,9 @@ public sealed partial class PlaceholderRule : AddedCodeRule
         return thrown is ObjectCreationExpressionSyntax creation &&
                creation.Type.ToString().EndsWith("NotImplementedException", StringComparison.Ordinal);
     }
+
+    static bool InTestDouble(SyntaxNode node) =>
+        node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { BaseList: not null };
 
     public static bool IsPlaceholder(string value)
     {

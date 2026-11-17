@@ -45,6 +45,8 @@ public static class DefaultRules
         new MisleadingIdNameRule(),
         new EncodeBeforeLengthCheckRule(),
         new DoubleErrorHandlingRule(),
+        new LooseMediaTypeMatchRule(),
+        new AutoPropertyCandidateRule(),
 
         // Tests (PRB1xx)
         new MissingTestsRule(),
@@ -54,6 +56,7 @@ public static class DefaultRules
         new ReflectionIntoPrivatesRule(),
         new TimingAssertionRule(),
         new BareBooleanAssertsRule(),
+        new ExternalHostInTestRule(),
 
         // Config and dependencies (PRB2xx)
         new BuildConfigChangedRule(),
@@ -67,6 +70,7 @@ public static class DefaultRules
             config.GetShare("PRB302", "similarity", DuplicateCodeRule.DefaultSimilarity),
             config.GetShare("PRB302", "copySimilarity", DuplicateCodeRule.DefaultCopySimilarity),
             config.GetInt("PRB302", "minTokens", DuplicateCodeRule.DefaultMinTokens)),
+        new PublicApiBreakRule(),
         new ScopeCreepRule(config.GetShare("PRB303", "focusShare", ScopeCreepRule.DefaultFocusShare)),
         new ComplexNewMethodRule(config.GetInt("PRB013", "threshold", ComplexNewMethodRule.DefaultThreshold)),
         ];
